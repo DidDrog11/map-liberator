@@ -146,7 +146,7 @@ server <- function(input, output, session) {
       updateActionButton(session, "toggle_size", icon = icon("expand"))
     }
     
-    # 3. CRITICAL: Force Leaflet Resize (Robust Selector)
+    # 3. Force Leaflet Resize
     runjs("
       setTimeout(function() {
         // Find ANY element with class 'leaflet-container' inside the map_col

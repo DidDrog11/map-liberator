@@ -9,7 +9,6 @@ state_manager_ui <- function(id) {
   tagList(
     h4("Project Files"),
     div(style="display:flex; gap:5px;",
-        # Load Button (File Input)
         div(style="flex-grow:1;",
             fileInput(ns("load_file"), NULL, 
                       buttonLabel = "Load Project", 

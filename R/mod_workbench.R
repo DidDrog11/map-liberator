@@ -14,7 +14,6 @@ workbench_ui <- function(id) {
   )
 }
 
-# Renamed argument 'map_output' -> 'map_source' for clarity
 workbench_server <- function(id, map_source, controls_output, loaded_state) {
   moduleServer(id, function(input, output, session) {
     
@@ -24,7 +23,6 @@ workbench_server <- function(id, map_source, controls_output, loaded_state) {
     observeEvent(controls_output$add_trigger(), {
       
       # A. Get Selection
-      # map_source is now a list. We access the 'selected' reactive.
       if (!is.list(map_source) || is.null(map_source$selected)) {
         return() 
       }

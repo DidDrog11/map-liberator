@@ -50,3 +50,6 @@ rsconnect/
 
 # GADM files
 data/gadm
+
+# Manuscript folder
+manuscript/

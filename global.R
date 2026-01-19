@@ -78,7 +78,7 @@ load_gadm_locally <- function(country_iso, level) {
   stop(paste("No GADM files found for", country_iso, "at level", level))
 }
 
-# HELPER: Validation and Repair (Separated for clarity)
+# HELPER: Validation and Repair
 validate_and_repair <- function(sf_obj, level) {
   
   # Check for required columns
@@ -117,7 +117,7 @@ country_df <- countrycode::codelist |>
 
 country_vec <- setNames(as.list(country_df$code), country_df$name)
 
-# 4. Helper: Create Rich Tooltip (VECTORIZED)
+# 4. Helper: Create Rich Tooltip
 add_hierarchy_label <- function(sf_obj) {
   # Pre-allocate character vector
   n <- nrow(sf_obj)

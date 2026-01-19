@@ -13,7 +13,7 @@ library(rmapshaper)
 DATA_DIR <- file.path("data", "gadm")
 if (!dir.exists(DATA_DIR)) dir.create(DATA_DIR, recursive = TRUE)
 
-TARGET_COUNTRIES <- "GBR" 
+TARGET_COUNTRIES <- "GBR" # Can be set as "ALL" to download all, otherwise a list of target countries e.g. c("GBR", "NGA")
 
 # 2. HELPER FUNCTIONS
 process_country <- function(iso) {

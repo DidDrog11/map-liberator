@@ -7,7 +7,6 @@
 map_engine_ui <- function(id, height = "100%") {
   ns <- NS(id)
   
-  # Pure container, no spinner wrapper (handled by app.R CSS)
   div(style = "width: 100%; height: 100%; position: relative;",
       leafletOutput(ns("map"), width = "100%", height = "100%"),
       
@@ -60,7 +59,6 @@ map_engine_server <- function(id, controls_output) {
       }
       
       # 2. Target Layer (Interactive)
-      # If target is deep (e.g. Admin 3), make lines very thin to avoid "blackout"
       if (!is.null(target)) {
         
         # Adaptive Weight: If we have >1000 polygons, make them super thin

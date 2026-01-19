@@ -37,7 +37,7 @@ controls_ui <- function(id) {
         
         hr(),
         
-        # Actions (Moved here)
+        # Actions
         actionButton(ns("load_data"), "1. Load Data", class = "btn-primary", width = "100%", icon = icon("database")),
         div(style = "margin-top: 5px; margin-bottom: 5px;", uiOutput(ns("visualise_ui"))),
         
