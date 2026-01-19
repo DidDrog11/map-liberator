@@ -10,7 +10,9 @@ It bridges the gap between the previous practice of outbreak reporting (data loc
 
 ## 🚀 Purpose
 
-In public health and epidemiology, valuable data often exists only as static maps in weekly bulletins (e.g., *"Figure 1: Confirmed Lassa Fever Cases by LGA"*). Extracting this data usually requires expensive GIS software or tedious manual entry.
+In public health and epidemiology, valuable data often exists only as static maps in weekly bulletins (e.g., Figure 1). Extracting this data usually requires expensive GIS software or tedious manual entry.
+
+![Figure 1: Confirmed Lassa Fever Cases by LGA. Obtained from NCDC Situation Report 52, 2025](www/epi_week_52_2025_LF.png)
 
 **Map Liberator** addresses this by providing a lightweight, split-screen interface where users can:
 1.  **Load** official administrative boundaries (Admin 0, 1, 2) for any country.
@@ -60,7 +62,7 @@ If you prefer to run the app on your own machine (e.g., for data privacy or offl
 
 1.  **Clone the Repository**
     ```bash
-    git clone [https://github.com/diddrog11/map-liberator.git](https://github.com/diddrog11/map-liberator.git)
+    git clone https://github.com/diddrog11/map-liberator.git
     ```
 
 2.  **Install Dependencies**
