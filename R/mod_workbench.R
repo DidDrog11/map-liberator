@@ -1,81 +1,112 @@
 # R/mod_workbench.R
+# ------------------------------------------------------------------------------
+# MODULE: Workbench (Data Ledger)
+# ------------------------------------------------------------------------------
+
 workbench_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    div(class = "card", style="padding:15px; background-color: #fff;",
-        h4("Project Summary"),
-        div(style="display:flex; justify-content:space-between; align-items:center;",
-            p(class="text-muted", "Review your extracted data before downloading."),
-            actionButton(ns("delete_rows"), "Delete Selected", class = "btn-warning btn-sm", icon = icon("trash"))
-        ),
-        DTOutput(ns("project_table")),
-        br(),
-        downloadButton(ns("download_project"), "Download Final CSV", class = "btn-success", style="width:100%")
-    )
+    div(style = "display: flex; gap: 10px; margin-bottom: 10px;",
+        downloadButton(ns("download_csv"), "Download CSV", class = "btn-secondary btn-sm"),
+        actionButton(ns("delete_rows"), "Delete Selected", icon = icon("trash"), class = "btn-danger btn-sm")
+    ),
+    DT::DTOutput(ns("ledger_table"))
   )
 }
 
-workbench_server <- function(id, map_output, controls_output, loaded_state = NULL) {
+# Renamed argument 'map_output' -> 'map_source' for clarity
+workbench_server <- function(id, map_source, controls_output, loaded_state) {
   moduleServer(id, function(input, output, session) {
     
     project_data <- reactiveVal(data.frame())
     
-    # Load State
-    if (!is.null(loaded_state)) {
-      observeEvent(loaded_state(), { req(loaded_state()); project_data(loaded_state()) })
-    }
-    
-    # --- ADD TO PROJECT LOGIC ---
-    # Triggered by the Sidebar button
+    # 1. ADD DATA
     observeEvent(controls_output$add_trigger(), {
-      ids <- map_output$current_selection()
-      data <- map_output$current_data()
-      meta <- controls_output$metadata()
+      
+      # A. Get Selection
+      # map_source is now a list. We access the 'selected' reactive.
+      if (!is.list(map_source) || is.null(map_source$selected)) {
+        return() 
+      }
+      
+      ids <- map_source$selected() # Get the vector of IDs (e.g. c("GID.1", "GID.5"))
       
       if (length(ids) == 0) {
-        showNotification("No areas selected!", type = "warning")
+        showNotification("No regions selected!", type = "warning")
         return()
       }
       
-      # Handle Defaults for Date
-      yr <- if (nzchar(meta$year)) meta$year else "XX"
-      mo <- if (nzchar(meta$month)) meta$month else "XX"
-      dy <- if (nzchar(meta$day)) meta$day else "XX"
+      # B. Get Metadata & Map Reference
+      meta <- controls_output$metadata()
+      current_map <- controls_output$geom_data()
       
-      selected_poly <- data |> st_drop_geometry() |> filter(layerId %in% ids)
-      
-      new_rows <- selected_poly |> 
-        mutate(
-          Project_Name = meta$project,
-          Report_Year = yr,
-          Report_Month = mo,
-          Report_Day = dy,
-          Source_ID = meta$source,
-          Entry_ID = paste(layerId, yr, mo, dy, sep = "_"),
-          Commit_Timestamp = Sys.time()
+      # C. Loop through IDs and create rows
+      new_rows <- lapply(ids, function(id) {
+        
+        # Name Lookup
+        region_name <- "Unknown"
+        if (!is.null(current_map)) {
+          record <- current_map[current_map$layerId == id, ]
+          if (nrow(record) > 0) {
+            if("NAME_3" %in% names(record)) region_name <- record$NAME_3
+            else if("NAME_2" %in% names(record)) region_name <- record$NAME_2
+            else if("NAME_1" %in% names(record)) region_name <- record$NAME_1
+            else if("NAME_0" %in% names(record)) region_name <- record$NAME_0
+          }
+        }
+        
+        # Create Single Row
+        data.frame(
+          Timestamp = format(Sys.time(), "%H:%M:%S"),
+          Project   = meta$project,
+          Source    = meta$source,
+          Date_Ref  = paste(meta$year, meta$month, meta$day, sep="-"),
+          Region_ID = id,
+          Region_Name = region_name,
+          Variable  = meta$var_name,
+          Value     = as.character(meta$var_value),
+          stringsAsFactors = FALSE
         )
+      })
       
-      showNotification(paste("Added", nrow(new_rows), "areas to project."), type = "message")
+      # D. Combine and Save
+      batch_df <- dplyr::bind_rows(new_rows)
       
       current <- project_data()
-      if(nrow(current) > 0) new_rows <- new_rows[!new_rows$Entry_ID %in% current$Entry_ID, ]
+      updated <- dplyr::bind_rows(current, batch_df)
+      project_data(updated)
       
-      if(nrow(new_rows) > 0) project_data(bind_rows(current, new_rows))
+      showNotification(paste("Added", length(ids), "rows to ledger."), type = "message")
     })
     
-    # Delete Logic
+    # 2. LOAD STATE
+    observe({
+      req(loaded_state())
+      if (nrow(loaded_state()) > 0) project_data(loaded_state())
+    })
+    
+    # 3. DELETE
     observeEvent(input$delete_rows, {
-      req(input$project_table_rows_selected)
-      project_data(project_data()[-input$project_table_rows_selected, ])
+      req(input$ledger_table_rows_selected)
+      current <- project_data()
+      if (nrow(current) > 0) {
+        updated <- current[-input$ledger_table_rows_selected, ]
+        project_data(updated)
+      }
     })
     
-    # Render Table
-    output$project_table <- renderDT({
-      project_data() |> select(any_of(c("Project_Name", "NAME_1", "NAME_2", "Report_Year", "Report_Month", "Source_ID")))
-    }, options = list(pageLength = 10, dom = 'tip'))
+    # 4. RENDER
+    output$ledger_table <- DT::renderDT({
+      req(project_data())
+      DT::datatable(project_data(), 
+                    options = list(pageLength = 5, scrollX = TRUE),
+                    rownames = FALSE,
+                    selection = "multiple")
+    })
     
-    output$download_project <- downloadHandler(
-      filename = function() { paste0("MapLiberator_", Sys.Date(), ".csv") },
+    # 5. DOWNLOAD
+    output$download_csv <- downloadHandler(
+      filename = function() { paste0("map_liberator_", Sys.Date(), ".csv") },
       content = function(file) { write.csv(project_data(), file, row.names = FALSE) }
     )
     

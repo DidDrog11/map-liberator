@@ -1,13 +1,15 @@
 # R/mod_controls.R
 # ------------------------------------------------------------------------------
-# MODULE: Control Panel (Optimized)
+# MODULE: Control Panel
 # ------------------------------------------------------------------------------
 
 controls_ui <- function(id) {
   ns <- NS(id)
   tagList(
     accordion(
-      open = "Geography Scope",
+      open = "Project Metadata", # Default open for data entry flow
+      
+      # --- PANEL 1: METADATA ---
       accordion_panel(
         "Project Metadata",
         icon = icon("clipboard-list"),
@@ -19,30 +21,49 @@ controls_ui <- function(id) {
         ),
         textInput(ns("meta_source"), "Source ID", placeholder = "e.g. SitRep 42")
       ),
+      
+      # --- PANEL 2: GEOGRAPHY (Setup & Navigation) ---
       accordion_panel(
         "Geography Scope",
         icon = icon("globe"),
+        
+        # Inputs
         selectizeInput(ns("country"), "Country:", choices = NULL, options = list(placeholder = 'Type country...', maxOptions = 1000)),
         radioButtons(ns("target_level"), "Target Level (Interact):",
                      choices = c("Admin 1" = 1, "Admin 2" = 2, "Admin 3" = 3),
                      selected = 2, inline = TRUE),
         uiOutput(ns("filter_ui_admin1")),
         uiOutput(ns("filter_ui_admin2")),
+        
         hr(),
-        checkboxInput(ns("simplify_geom"), "Fast Render (Simplify Polygons)", value = TRUE)
+        
+        # Actions (Moved here)
+        actionButton(ns("load_data"), "1. Load Data", class = "btn-primary", width = "100%", icon = icon("database")),
+        div(style = "margin-top: 5px; margin-bottom: 5px;", uiOutput(ns("visualise_ui"))),
+        
+        splitLayout(
+          cellWidths = c("50%", "50%"),
+          actionButton(ns("zoom_map"), "3. Zoom", class = "btn-info", width = "95%", icon = icon("expand")),
+          actionButton(ns("clear_map"), "Reset", class = "btn-danger", width = "95%", icon = icon("trash"))
+        )
+      ),
+      
+      # --- PANEL 3: DATA ENTRY (Attributes & Add) ---
+      accordion_panel(
+        "Data Attributes",
+        icon = icon("pen-to-square"),
+        
+        # Inputs
+        textInput(ns("var_name"), "Variable Name:", value = "status", placeholder = "e.g. cases, presence"),
+        selectInput(ns("var_type"), "Data Type:", choices = c("Binary (Present)"="binary", "Numeric (Count)"="numeric", "Text"="text")),
+        uiOutput(ns("var_value_ui")),
+        
+        hr(),
+        
+        # Action (Moved here)
+        actionButton(ns("add_to_project"), "Add Data to Ledger", class = "btn-success", width = "100%", icon = icon("plus-circle"))
       )
-    ),
-    br(),
-    h5("Actions"),
-    actionButton(ns("load_data"), "1. Load Data", class = "btn-primary", width = "100%", icon = icon("database")),
-    div(style = "margin-top: 5px; margin-bottom: 5px;", uiOutput(ns("visualise_ui"))),
-    splitLayout(
-      cellWidths = c("50%", "50%"),
-      actionButton(ns("zoom_map"), "3. Zoom", class = "btn-info", width = "95%", icon = icon("expand")),
-      actionButton(ns("clear_map"), "Reset", class = "btn-danger", width = "95%", icon = icon("trash"))
-    ),
-    br(),
-    actionButton(ns("add_to_project"), "Add Selection to Project", class = "btn-success", width = "100%", icon = icon("plus-circle"))
+    )
   )
 }
 
@@ -52,11 +73,26 @@ controls_server <- function(id) {
     
     updateSelectizeInput(session, "country", choices = country_vec, selected = "GBR", server = TRUE)
     
-    # --- 1. METADATA HELPERS ---
+    # --- DYNAMIC DATA INPUT UI ---
+    output$var_value_ui <- renderUI({
+      req(input$var_type)
+      if (input$var_type == "numeric") {
+        numericInput(ns("var_value"), "Value:", value = 0, min = 0)
+      } else if (input$var_type == "binary") {
+        textInput(ns("var_value"), "Value:", value = "1", placeholder = "1")
+      } else {
+        textInput(ns("var_value"), "Value:", value = "", placeholder = "Enter text...")
+      }
+    })
+    
+    # --- METADATA HELPERS ---
     get_names_only <- function(iso, level, filter_col=NULL, filter_val=NULL) {
       tryCatch({
         f_path <- file.path(LOCAL_CACHE_DIR, paste0("gadm41_", iso, "_3_pk.rds"))
+        if (!file.exists(f_path)) f_path <- file.path(LOCAL_CACHE_DIR, paste0("gadm41_", iso, "_2_pk.rds"))
+        if (!file.exists(f_path)) f_path <- file.path(LOCAL_CACHE_DIR, paste0("gadm41_", iso, "_1_pk.rds"))
         if (!file.exists(f_path)) return(NULL)
+        
         df <- as.data.frame(readRDS(f_path)) 
         if (!is.null(filter_col) && !is.null(filter_val)) {
           if (filter_col %in% names(df)) df <- df[df[[filter_col]] %in% filter_val, ]
@@ -81,14 +117,12 @@ controls_server <- function(id) {
       if(!is.null(names)) selectizeInput(ns("filter_a2"), "Filter Admin 2:", choices = names, multiple = TRUE)
     })
     
-    # --- 2. THE PIPELINE ENGINE ---
+    # --- PIPELINE ENGINE ---
     loaded_cache <- reactiveValues(target = NULL, context = list(), ready = FALSE)
     pipeline_data <- reactiveValues(raw = NULL, target = NULL)
     
-    # Tracks the current step ("idle", "step1", "step2", "step3")
     engine_step <- reactiveVal("idle")
     
-    # Helper to update icons via JavaScript (Instant, no flicker)
     set_status <- function(step_id, status) {
       icon_html <- switch(status,
                           "pending" = "<i class='fa fa-circle text-muted'></i>",
@@ -102,19 +136,16 @@ controls_server <- function(id) {
       req(input$country)
       loaded_cache$ready <- FALSE
       
-      # 1. SHOW MODAL (Direct HTML = Instant Load)
-      # We give each icon a specific ID (e.g. "s1_icon") so we can target it later
       showModal(modalDialog(
         title = paste("Processing", input$country),
         div(style = "margin-left: 15%; margin-top: 15px; font-size: 1.1em;",
             div(p(HTML(paste0("<span id='", ns("s1_icon"), "'><i class='fa fa-circle text-muted'></i></span> Loading Raw Borders")))),
             div(p(HTML(paste0("<span id='", ns("s2_icon"), "'><i class='fa fa-circle text-muted'></i></span> Filtering & Simplifying")))),
-            div(p(HTML(paste0("<span id='", ns("s3_icon"), "'><i class='fa fa-circle text-muted'></i></span> Preparing Context Layers"))))
+            div(p(HTML(paste0("<span id='", ns("s3_icon"), "'><i class='fa fa-circle text-muted'></i></span> Building Context (Dynamic)"))))
         ),
         footer = NULL, easyClose = FALSE
       ))
       
-      # 2. Start the Chain
       engine_step("init")
     })
     
@@ -126,7 +157,6 @@ controls_server <- function(id) {
       # >> INIT -> STEP 1
       if(step == "init") {
         set_status(ns("s1_icon"), "running")
-        # Force a tiny wait to let the browser paint the spinner
         invalidateLater(100)
         engine_step("do_s1")
       }
@@ -134,11 +164,23 @@ controls_server <- function(id) {
       # >> DO STEP 1 (Load Raw)
       else if(step == "do_s1") {
         target_lvl <- as.numeric(input$target_level)
+        
         raw <- tryCatch({
           load_gadm_locally(input$country, level = target_lvl) |> add_hierarchy_label()
-        }, error = function(e) return(NULL))
-        pipeline_data$raw <- raw
+        }, error = function(e) {
+          showNotification(paste("Load failed:", e$message), type = "error")
+          return(NULL)
+        })
         
+        if(is.null(raw) || nrow(raw) == 0) {
+          set_status(ns("s1_icon"), "pending")
+          showNotification("No data loaded. Check country selection.", type = "error")
+          removeModal()
+          engine_step("idle")
+          return()
+        }
+        
+        pipeline_data$raw <- raw
         set_status(ns("s1_icon"), "done")
         engine_step("prep_s2")
       }
@@ -150,12 +192,11 @@ controls_server <- function(id) {
         engine_step("do_s2")
       }
       
-      # >> DO STEP 2 (Filter & Simplify)
+      # >> DO STEP 2 (Filter)
       else if(step == "do_s2") {
         target_raw <- pipeline_data$raw
         if(is.null(target_raw)) { removeModal(); return() }
         
-        # Filter
         if (!is.null(input$filter_a1) && length(input$filter_a1) > 0 && "NAME_1" %in% names(target_raw)) {
           target_raw <- target_raw |> filter(NAME_1 %in% input$filter_a1)
         }
@@ -164,19 +205,21 @@ controls_server <- function(id) {
         }
         
         if (nrow(target_raw) == 0) {
-          removeModal(); showNotification("Filter resulted in 0 areas!", type = "warning"); return()
+          removeModal()
+          showNotification("Filter resulted in 0 areas!", type = "warning")
+          engine_step("idle")
+          return()
         }
         
-        # Simplify
-        if (input$simplify_geom) target_raw <- st_simplify(target_raw, preserveTopology = TRUE, dTolerance = 0.002)
-        
-        # ID
         target_lvl <- as.numeric(input$target_level)
         id_col <- paste0("GID_", target_lvl)
-        if(id_col %in% names(target_raw)) target_raw$layerId <- target_raw[[id_col]] else target_raw$layerId <- as.character(1:nrow(target_raw))
+        if(id_col %in% names(target_raw)) {
+          target_raw$layerId <- target_raw[[id_col]]
+        } else {
+          target_raw$layerId <- as.character(1:nrow(target_raw))
+        }
         
         pipeline_data$target <- target_raw
-        
         set_status(ns("s2_icon"), "done")
         engine_step("prep_s3")
       }
@@ -191,32 +234,33 @@ controls_server <- function(id) {
       # >> DO STEP 3 (Context)
       else if(step == "do_s3") {
         target_lvl <- as.numeric(input$target_level)
-        simplify <- input$simplify_geom
+        target_sf  <- pipeline_data$target
         context_layers <- list()
         
-        try({ 
-          l0 <- load_gadm_locally(input$country, level = 0)
-          if(simplify) l0 <- st_simplify(l0, preserveTopology=TRUE, dTolerance=0.005)
-          context_layers$Adm0 <- l0
-        }, silent=TRUE)
-        
-        try({ 
-          l1 <- load_gadm_locally(input$country, level = 1)
-          if(simplify) l1 <- st_simplify(l1, preserveTopology=TRUE, dTolerance=0.003)
-          context_layers$Adm1 <- l1
-        }, silent=TRUE)
-        
-        if (target_lvl > 2) {
-          try({ 
-            l2 <- load_gadm_locally(input$country, level = 2)
-            if(simplify) l2 <- st_simplify(l2, preserveTopology=TRUE, dTolerance=0.002)
-            context_layers$Adm2 <- l2
-          }, silent=TRUE)
+        # Helper: Aggregate upwards
+        make_context <- function(data, level_idx) {
+          cols <- c(paste0("GID_", level_idx), paste0("NAME_", level_idx))
+          if (all(cols %in% names(data))) {
+            return(
+              data |> 
+                group_by(across(all_of(cols))) |> 
+                summarise(geometry = st_union(geometry), .groups = "drop")
+            )
+          } else {
+            return(load_gadm_locally(input$country, level = level_idx))
+          }
         }
+        
+        try({ context_layers$Adm0 <- make_context(target_sf, 0) }, silent = TRUE)
+        if (target_lvl > 1) try({ context_layers$Adm1 <- make_context(target_sf, 1) }, silent = TRUE)
+        if (target_lvl > 2) try({ context_layers$Adm2 <- make_context(target_sf, 2) }, silent = TRUE)
         
         loaded_cache$target <- pipeline_data$target
         loaded_cache$context <- context_layers
         loaded_cache$ready <- TRUE
+        
+        pipeline_data$raw <- NULL
+        gc() 
         
         set_status(ns("s3_icon"), "done")
         engine_step("finish")
@@ -224,7 +268,7 @@ controls_server <- function(id) {
       
       # >> FINISH
       else if(step == "finish") {
-        invalidateLater(500) # Short pause to see all green ticks
+        invalidateLater(500) 
         engine_step("close")
       }
       
@@ -235,7 +279,7 @@ controls_server <- function(id) {
       }
     })
     
-    # --- 3. VISUALISE & OUTPUTS ---
+    # --- VISUALISE UI ---
     output$visualise_ui <- renderUI({
       if (loaded_cache$ready) {
         actionButton(ns("plot_map"), "2. Visualise Map", class = "btn-warning", width = "100%", icon = icon("paint-brush"))
@@ -261,13 +305,22 @@ controls_server <- function(id) {
       loaded_cache$ready <- FALSE
     })
     
+    # --- RETURNS ---
     list(
       geom_data = reactive(geometry_output$target),
       context_data = reactive(geometry_output$context),
       geom_trigger = reactive(geometry_output$trigger),
       zoom_trigger = reactive(input$zoom_map),
       metadata = reactive({
-        list(project = input$project_name, year = input$meta_year, month = input$meta_month, day = input$meta_day, source = input$meta_source)
+        list(
+          project = input$project_name, 
+          year = input$meta_year, 
+          month = input$meta_month, 
+          day = input$meta_day, 
+          source = input$meta_source,
+          var_name = input$var_name,
+          var_value = input$var_value
+        )
       }),
       add_trigger  = reactive(input$add_to_project),
       clear_trigger = reactive(input$clear_map)

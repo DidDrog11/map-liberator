@@ -1,129 +1,172 @@
 # R/mod_map_engine.R
-map_engine_ui <- function(id) {
+# ------------------------------------------------------------------------------
+# MODULE: Map Engine (Robust & Stateful)
+# ------------------------------------------------------------------------------
+
+# 1. UI
+map_engine_ui <- function(id, height = "100%") {
   ns <- NS(id)
-  withSpinner(leafletOutput(ns("map"), height = "85vh"), type = 6)
+  
+  # Pure container, no spinner wrapper (handled by app.R CSS)
+  div(style = "width: 100%; height: 100%; position: relative;",
+      leafletOutput(ns("map"), width = "100%", height = "100%"),
+      
+      div(style="position:absolute; bottom:25px; left:20px; background:rgba(255,255,255,0.8); padding:4px 8px; border-radius:4px; font-size:11px; z-index:1000; pointer-events:none;",
+          textOutput(ns("perf_msg"))
+      )
+  )
 }
 
+# 2. SERVER
 map_engine_server <- function(id, controls_output) {
   moduleServer(id, function(input, output, session) {
     
     selected_ids <- reactiveVal(character(0))
+    last_render_time <- reactiveVal(NA)
+    data_drawn <- reactiveVal(FALSE)
     
+    # --- HELPER: DRAWING LOGIC (Visual Hierarchy) ---
+    draw_geometry <- function(map_obj, target, context) {
+      
+      # 1. Context Layers (Background)
+      # STRATEGY: Higher levels = Thicker, Darker lines.
+      
+      # Admin 0 (National): Thickest
+      if (!is.null(context$Adm0)) {
+        map_obj <- map_obj |> addPolygons(
+          data = context$Adm0, group = "Reference Borders", 
+          options = pathOptions(pane = "context_pane", clickable = FALSE), 
+          fill = FALSE, color = "#000000", weight = 3.0, opacity = 1.0
+        )
+      }
+      
+      # Admin 1 (State): Medium
+      if (!is.null(context$Adm1)) {
+        map_obj <- map_obj |> addPolygons(
+          data = context$Adm1, group = "Reference Borders", 
+          options = pathOptions(pane = "context_pane", clickable = FALSE), 
+          fill = FALSE, color = "#444444", weight = 2.0, opacity = 0.9
+        )
+      }
+      
+      # Admin 2 (District): Thin
+      is_adm2_target <- "GID_2" %in% names(target)
+      if (!is.null(context$Adm2) && !is_adm2_target) {
+        map_obj <- map_obj |> addPolygons(
+          data = context$Adm2, group = "Reference Borders", 
+          options = pathOptions(pane = "context_pane", clickable = FALSE), 
+          fill = FALSE, color = "#888888", weight = 1.0, opacity = 0.6
+        )
+      }
+      
+      # 2. Target Layer (Interactive)
+      # If target is deep (e.g. Admin 3), make lines very thin to avoid "blackout"
+      if (!is.null(target)) {
+        
+        # Adaptive Weight: If we have >1000 polygons, make them super thin
+        n_poly <- nrow(target)
+        target_weight <- if (n_poly > 1000) 0.5 else if (n_poly > 500) 0.8 else 1.2
+        
+        map_obj <- map_obj |> addPolygons(
+          data = target,
+          layerId = ~layerId,
+          fillColor = "white", fillOpacity = 0.05, 
+          color = "#2c3e50", weight = target_weight, opacity = 0.8,
+          label = ~Tooltip,
+          options = pathOptions(pane = "geom_pane"),
+          highlightOptions = highlightOptions(color = "#e74c3c", weight = 3, bringToFront = TRUE, fillOpacity = 0.2),
+          group = "Target Layer"
+        )
+      }
+      return(map_obj)
+    }
+    
+    # --- A. INITIAL RENDER ---
     output$map <- renderLeaflet({
-      leaflet() |> 
-        addProviderTiles(providers$CartoDB.Positron) |> 
+      m <- leaflet(options = leafletOptions(preferCanvas = TRUE)) |>
+        addProviderTiles(providers$CartoDB.Positron) |>
+        setView(lng = 0, lat = 20, zoom = 3) |>
         addMapPane("context_pane", zIndex = 390) |>
         addMapPane("geom_pane", zIndex = 400)
+      
+      target_now  <- isolate(controls_output$geom_data())
+      context_now <- isolate(controls_output$context_data())
+      
+      if (!is.null(target_now)) {
+        m <- draw_geometry(m, target_now, context_now)
+        bbox <- sf::st_bbox(target_now)
+        m <- m |> fitBounds(bbox[["xmin"]], bbox[["ymin"]], bbox[["xmax"]], bbox[["ymax"]])
+        data_drawn(TRUE)
+      }
+      
+      return(m)
     })
     
-    # 1. DRAW LAYERS
+    # --- B. UPDATE TRIGGER ---
     observeEvent(controls_output$geom_trigger(), {
-      target <- controls_output$geom_data()
+      start_time <- Sys.time()
+      target  <- controls_output$geom_data()
       context <- controls_output$context_data()
-      
-      # Handle Clear
-      if (is.null(target)) {
-        leafletProxy("map") |> clearGroup("Interaction") |> clearGroup("Adm0") |> clearGroup("Adm1") |> clearGroup("Adm2") |> removeLayersControl()
-        selected_ids(character(0))
-        return()
-      }
       
       selected_ids(character(0))
       
-      proxy <- leafletProxy("map") |> 
-        clearGroup("Interaction") |> 
-        clearGroup("Adm0") |> 
-        clearGroup("Adm1") |> 
-        clearGroup("Adm2")
+      p <- leafletProxy("map") |> clearShapes() |> clearControls()
       
-      # Draw Context Layers
-      # Adm0: Thick Black
-      if (!is.null(context$Adm0)) {
-        proxy |> addPolygons(data = context$Adm0, group = "Adm0", fill = FALSE, color = "black", weight = 3, opacity = 1, options = pathOptions(pane = "context_pane"))
+      if (!is.null(target)) {
+        p <- draw_geometry(p, target, context)
+        
+        groups <- c("Target Layer", "CTX")
+        p <- p |> addLayersControl(overlayGroups = groups, options = layersControlOptions(collapsed = FALSE))
+        
+        bbox <- sf::st_bbox(target)
+        p |> fitBounds(bbox[["xmin"]], bbox[["ymin"]], bbox[["xmax"]], bbox[["ymax"]])
+        
+        render_time <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+        last_render_time(render_time)
+        data_drawn(TRUE)
+      } else {
+        data_drawn(FALSE)
       }
-      # Adm1: Medium Grey
-      if (!is.null(context$Adm1)) {
-        proxy |> addPolygons(data = context$Adm1, group = "Adm1", fill = FALSE, color = "#444", weight = 2, opacity = 1, options = pathOptions(pane = "context_pane"))
-      }
-      # Adm2: Thin Grey (Only if we have it)
-      if (!is.null(context$Adm2)) {
-        proxy |> addPolygons(data = context$Adm2, group = "Adm2", fill = FALSE, color = "#777", weight = 1, opacity = 1, options = pathOptions(pane = "context_pane"))
-      }
-      
-      # Draw Interactive Target
-      proxy |> addPolygons(
-        data = target, layerId = ~layerId,
-        fillColor = "white", fillOpacity = 0.1, 
-        color = "#000", weight = 0.5, opacity = 1,
-        label = ~Tooltip, group = "Interaction",
-        options = pathOptions(pane = "geom_pane"),
-        highlightOptions = highlightOptions(color = "red", weight = 2, bringToFront = TRUE)
-      )
-      
-      # Toggle Controls
-      groups <- c("Interaction")
-      if (!is.null(context$Adm0)) groups <- c(groups, "Adm0")
-      if (!is.null(context$Adm1)) groups <- c(groups, "Adm1")
-      if (!is.null(context$Adm2)) groups <- c(groups, "Adm2")
-      
-      proxy |> addLayersControl(overlayGroups = groups, options = layersControlOptions(collapsed = FALSE))
     })
     
-    # 2. FIX ZOOM BUG
-    observeEvent(controls_output$zoom_trigger(), {
-      trigger <- controls_output$zoom_trigger()
-      req(trigger > 0, controls_output$geom_data())
-      
-      data <- controls_output$geom_data()
-      bb <- st_bbox(data)
-      
-      # Coordinates
-      lng1 <- as.numeric(bb["xmin"]); lat1 <- as.numeric(bb["ymin"])
-      lng2 <- as.numeric(bb["xmax"]); lat2 <- as.numeric(bb["ymax"])
-      
-      message(paste("Zooming to:", lat1, lng1, " - ", lat2, lng2))
-      
-      # FIX: Use correct Selector ID
-      # session$ns("map") resolves to "modulename-map" which matches the leaflet ID
-      map_id <- session$ns("map")
-      
-      runjs(sprintf("
-        var map = HTMLWidgets.find('#%s').getMap();
-        map.invalidateSize();
-        map.fitBounds([[%s, %s], [%s, %s]]);
-      ", map_id, lat1, lng1, lat2, lng2))
-    })
-    
-    # 3. CLICK LOGIC
+    # --- C. INTERACTION ---
     observeEvent(input$map_shape_click, {
       click <- input$map_shape_click
-      if (is.null(click$id) || is.null(controls_output$geom_data())) return()
-      
-      # Only process clicks on "Interaction" layer
-      # Check if clicked ID exists in target data
       target <- controls_output$geom_data()
+      if (is.null(click$id) || is.null(target)) return()
       if (!click$id %in% target$layerId) return()
       
       curr <- selected_ids()
       if (click$id %in% curr) {
-        selected_ids(setdiff(curr, click$id)); col <- "white"; op <- 0.1
+        selected_ids(setdiff(curr, click$id))
+        col <- "#2c3e50"; fill <- "white"; op <- 0.05; w <- 0.8 # Reset to thin
       } else {
-        selected_ids(c(curr, click$id)); col <- "red"; op <- 0.6
+        selected_ids(c(curr, click$id))
+        col <- "#e74c3c"; fill <- "#e74c3c"; op <- 0.5; w <- 3.0 # Select Thick
       }
-      
-      poly <- target[target$layerId == click$id, ]
       
       leafletProxy("map") |> 
         addPolygons(
-          data = poly, layerId = click$id,
-          fillColor = col, fillOpacity = op, 
-          color = "black", weight = 0.5, opacity = 1,
-          label = poly$Tooltip, options = pathOptions(pane = "geom_pane"), group = "Interaction"
+          data = target[target$layerId == click$id, ], 
+          layerId = click$id, 
+          fillColor = fill, fillOpacity = op, 
+          color = col, weight = w, opacity = 1.0, 
+          label = ~Tooltip, options = pathOptions(pane = "geom_pane"),
+          group = "Target Layer"
         )
     })
     
     observeEvent(controls_output$clear_trigger(), { selected_ids(character(0)) })
     
-    return(list(current_selection = selected_ids, current_data = controls_output$geom_data))
+    # --- D. PERFORMANCE DISPLAY ---
+    output$perf_msg <- renderText({
+      if (!data_drawn()) return("")
+      rt <- last_render_time()
+      n <- nrow(isolate(controls_output$geom_data()))
+      if (is.na(rt) || is.null(n)) return("")
+      paste0(n, " polys | ", round(rt, 2), "s")
+    })
+    
+    return(list(click = reactive({ input$map_shape_click }), selected = selected_ids))
   })
 }

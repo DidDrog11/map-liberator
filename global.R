@@ -1,10 +1,12 @@
-# global.R
+# global.R - CORRECTED VERSION
 # ------------------------------------------------------------------------------
 # PURPOSE: Global configuration, Libraries, and Robust Data Loading
 # ------------------------------------------------------------------------------
 
 library(shiny)
+library(shinyWidgets)
 library(leaflet)
+library(bslib)
 library(sf)
 library(terra)
 library(geodata)
@@ -16,26 +18,19 @@ library(DT)
 library(base64enc)
 
 # 1. DEFINE CACHE PATH
-LOCAL_CACHE_DIR <- "C:/Users/ucbtds4/R_Repositories/arenavirus_hantavirus/data/gadm"
+LOCAL_CACHE_DIR <- file.path(getwd(), "data", "gadm")
 
-# Fallback
-if (!dir.exists(LOCAL_CACHE_DIR)) {
-  LOCAL_CACHE_DIR <- file.path("data", "cache")
-  if (!dir.exists(LOCAL_CACHE_DIR)) dir.create(LOCAL_CACHE_DIR, recursive = TRUE)
-}
-
-# 2. HELPER: Robust GADM Loader
+# 2. HELPER: Robust GADM Loader WITH VALIDATION
 load_gadm_locally <- function(country_iso, level) {
   
   # 1. Try to find the EXACT level file first (Fastest)
-  # Pattern: gadm41_NGA_1_pk.rds
   f_name_exact <- paste0("gadm41_", country_iso, "_", level, "_pk.rds")
   f_path_exact <- file.path(LOCAL_CACHE_DIR, f_name_exact)
   
   if (file.exists(f_path_exact)) {
-    # message(paste("Loading exact level:", f_path_exact))
     spat_vec <- readRDS(f_path_exact)
-    return(st_as_sf(spat_vec) |> st_transform(4326))
+    sf_obj <- st_as_sf(spat_vec) |> st_transform(4326)
+    return(validate_and_repair(sf_obj, level))  # <-- VALIDATE BEFORE RETURN
   }
   
   # 2. If exact missing, try Level 3 and aggregate (Slower fallback)
@@ -43,58 +38,121 @@ load_gadm_locally <- function(country_iso, level) {
   f_path_l3 <- file.path(LOCAL_CACHE_DIR, f_name_l3)
   
   if (file.exists(f_path_l3)) {
-    # message(paste("Loading L3 fallback for:", level))
     spat_vec <- readRDS(f_path_l3)
     sf_obj <- st_as_sf(spat_vec) |> st_transform(4326)
     
-    if (level == 3) return(sf_obj)
+    if (level == 3) {
+      return(validate_and_repair(sf_obj, level))  # <-- VALIDATE
+    }
     
     # Aggregation Logic
     if (level == 2) {
       cols <- intersect(names(sf_obj), c("GID_0", "NAME_0", "COUNTRY", "GID_1", "NAME_1", "GID_2", "NAME_2"))
-      if(length(cols)>0) return(sf_obj |> group_by(across(all_of(cols))) |> summarise(geometry = st_union(geometry), .groups="drop"))
+      if(length(cols) > 0) {
+        sf_obj <- sf_obj |> 
+          group_by(across(all_of(cols))) |> 
+          summarise(geometry = st_union(geometry), .groups = "drop")
+      }
     }
-    if (level == 1) {
+    else if (level == 1) {
       cols <- intersect(names(sf_obj), c("GID_0", "NAME_0", "COUNTRY", "GID_1", "NAME_1"))
-      if(length(cols)>0) return(sf_obj |> group_by(across(all_of(cols))) |> summarise(geometry = st_union(geometry), .groups="drop"))
+      if(length(cols) > 0) {
+        sf_obj <- sf_obj |> 
+          group_by(across(all_of(cols))) |> 
+          summarise(geometry = st_union(geometry), .groups = "drop")
+      }
     }
-    if (level == 0) {
+    else if (level == 0) {
       cols <- intersect(names(sf_obj), c("GID_0", "NAME_0", "COUNTRY"))
-      if(length(cols)>0) return(sf_obj |> group_by(across(all_of(cols))) |> summarise(geometry = st_union(geometry), .groups="drop"))
+      if(length(cols) > 0) {
+        sf_obj <- sf_obj |> 
+          group_by(across(all_of(cols))) |> 
+          summarise(geometry = st_union(geometry), .groups = "drop")
+      }
     }
-    return(sf_obj)
+    
+    return(validate_and_repair(sf_obj, level))  # <-- VALIDATE
   }
   
-  stop(paste("No GADM files found for", country_iso))
+  # 3. If we get here, no files found
+  stop(paste("No GADM files found for", country_iso, "at level", level))
+}
+
+# HELPER: Validation and Repair (Separated for clarity)
+validate_and_repair <- function(sf_obj, level) {
+  
+  # Check for required columns
+  required_cols <- paste0(c("GID_", "NAME_"), 0:level)
+  missing_cols <- setdiff(required_cols, names(sf_obj))
+  
+  if(length(missing_cols) > 0) {
+    warning(paste(
+      "Missing expected columns:", 
+      paste(missing_cols, collapse = ", ")
+    ))
+  }
+  
+  # Check for invalid geometries
+  invalid <- which(!st_is_valid(sf_obj))
+  if(length(invalid) > 0) {
+    warning(paste(length(invalid), "invalid geometries detected. Attempting repair..."))
+    sf_obj <- st_make_valid(sf_obj)
+  }
+  
+  return(sf_obj)
 }
 
 # 3. Static Data
-available_files <- list.files(LOCAL_CACHE_DIR, pattern = "gadm41_.*_3_pk\\.rds")
-available_isos <- unique(substr(available_files, 8, 10))
+# Handle different column names in countrycode package versions
+c_name_col <- "country.name.en"
+if (!"country.name.en" %in% names(countrycode::codelist)) {
+  c_name_col <- "country.name"
+}
 
-# Create the Named List for Selectize (This enables the typing search)
+# Create the full list
 country_df <- countrycode::codelist |> 
-  filter(iso3c %in% available_isos) |> 
-  select(name = country.name.en, code = iso3c) |> 
-  arrange(name)
+  dplyr::filter(!is.na(iso3c), !is.na(.data[[c_name_col]])) |> 
+  dplyr::select(name = all_of(c_name_col), code = iso3c) |> 
+  dplyr::arrange(name)
 
-# Format as a list: list("Benin" = "BEN", "Nigeria" = "NGA")
 country_vec <- setNames(as.list(country_df$code), country_df$name)
 
-# 4. Helper: Create Rich Tooltip
+# 4. Helper: Create Rich Tooltip (VECTORIZED)
 add_hierarchy_label <- function(sf_obj) {
-  # Dynamically build a label string based on available columns
-  # We use HTML for formatting
+  # Pre-allocate character vector
+  n <- nrow(sf_obj)
+  tooltips <- vector("character", n)
   
-  sf_obj |> 
-    rowwise() |> 
-    mutate(
-      Tooltip = paste0(
-        "<strong>Country:</strong> ", ifelse("NAME_0" %in% names(sf_obj), NAME_0, ifelse("COUNTRY" %in% names(sf_obj), COUNTRY, "N/A")), "<br>",
-        ifelse("NAME_1" %in% names(sf_obj), paste0("<strong>ADM1:</strong> ", NAME_1, "<br>"), ""),
-        ifelse("NAME_2" %in% names(sf_obj), paste0("<strong>ADM2:</strong> ", NAME_2, "<br>"), ""),
-        ifelse("NAME_3" %in% names(sf_obj), paste0("<strong>ADM3:</strong> ", NAME_3), "")
-      ) |> lapply(htmltools::HTML)
-    ) |> 
-    ungroup()
+  # Build tooltip components vectorized
+  # Country (always present)
+  country <- if("NAME_0" %in% names(sf_obj)) {
+    sf_obj$NAME_0
+  } else if("COUNTRY" %in% names(sf_obj)) {
+    sf_obj$COUNTRY
+  } else {
+    rep("N/A", n)
+  }
+  
+  # Start with country
+  tooltips <- paste0("<strong>Country:</strong> ", country, "<br>")
+  
+  # Add Admin 1 if present
+  if("NAME_1" %in% names(sf_obj)) {
+    tooltips <- paste0(tooltips, "<strong>ADM1:</strong> ", sf_obj$NAME_1, "<br>")
+  }
+  
+  # Add Admin 2 if present
+  if("NAME_2" %in% names(sf_obj)) {
+    tooltips <- paste0(tooltips, "<strong>ADM2:</strong> ", sf_obj$NAME_2, "<br>")
+  }
+  
+  # Add Admin 3 if present
+  if("NAME_3" %in% names(sf_obj)) {
+    tooltips <- paste0(tooltips, "<strong>ADM3:</strong> ", sf_obj$NAME_3)
+  }
+  
+  # Convert to HTML and add to sf object
+  sf_obj$Tooltip <- lapply(tooltips, htmltools::HTML)
+  
+  return(sf_obj)
 }
