@@ -15,7 +15,7 @@ ui <- fluidPage(
   theme = bslib::bs_theme(version = 5, bootswatch = "flatly"),
   
   # CSS
-  tags$head(tags$style(HTML("
+  tags$head(tags$style(HTML("a
     /* 1. General Styles */
     .image-container { 
       width: 100%; height: 85vh; overflow: auto; 

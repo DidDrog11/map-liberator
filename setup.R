@@ -13,7 +13,7 @@ library(rmapshaper)
 DATA_DIR <- file.path("data", "gadm")
 if (!dir.exists(DATA_DIR)) dir.create(DATA_DIR, recursive = TRUE)
 
-TARGET_COUNTRIES <- "GBR" # Can be set as "ALL" to download all, otherwise a list of target countries e.g. c("GBR", "NGA")
+TARGET_COUNTRIES <- "ALL" # Can be set as "ALL" to download all, otherwise a list of target countries e.g. c("GBR", "NGA")
 
 # 2. HELPER FUNCTIONS
 process_country <- function(iso) {
@@ -113,27 +113,27 @@ save_layer <- function(sf_obj, iso, level) {
   }, error = function(e) 0)
   
   # --- TIERED STRATEGY DEFINITIONS ---
-  # Tier 1: Small (< 500k)   -> No Planar, Keep 40%
-  # Tier 2: Heavy (500k-2M)  -> Planar 100m, Keep 20%
-  # Tier 3: Huge (2M-10M)    -> Planar 500m, Keep 10%
-  # Tier 4: Nuclear (>10M)   -> Planar 1500m, Keep 4%
-  
+  # Tier 1: Small (< 500k)   -> No Planar, Keep 50%
+  # Tier 2: Heavy (500k-2M)  -> Planar 25m, Keep 50%
+  # Tier 3: Huge (2M-10M)    -> Planar 50m, Keep 40%
+  # Tier 4: Nuclear (>10M)   -> Planar 150m, Keep 10%
+  # Previous settings largest subunit was 3.5Mb
   if (total_pts > 10000000) {
     tier <- "Nuclear (>10M)"
-    planar_tol <- 150
-    keep_pct <- 0.04
+    planar_tol <- 100
+    keep_pct <- 0.3
   } else if (total_pts > 2000000) {
     tier <- "Huge (2M-10M)"
-    planar_tol <- 100
-    keep_pct <- 0.10
+    planar_tol <- 50
+    keep_pct <- 0.4
   } else if (total_pts > 500000) {
     tier <- "Heavy (500k-2M)"
-    planar_tol <- 50
-    keep_pct <- 0.20
+    planar_tol <- 25
+    keep_pct <- 0.50
   } else {
     tier <- "Standard (<500k)"
     planar_tol <- 0 # None
-    keep_pct <- 0.40
+    keep_pct <- 0.50
   }
   
   message(paste0("    [", tier, " | ", format(total_pts, big.mark=","), " pts]"))
