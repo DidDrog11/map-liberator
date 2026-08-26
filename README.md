@@ -2,6 +2,8 @@
 
 **Status:** Alpha 🛠️ | **Stack:** R, Shiny, Leaflet, sf
 
+[![DOI](https://zenodo.org/badge/1115268362.svg)](https://doi.org/10.5281/zenodo.18325137)
+
 **Map Liberator** is an open-source tool designed to recover spatial data from static images (e.g., PDF Situation Reports, textbook maps, screenshots) by "digitising" them directly into standard administrative boundaries.
 
 It bridges the gap between the previous practice of outbreak reporting (data locked in PDFs) and modern spatial analysis where data underlying visualisations are often shared.
