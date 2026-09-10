@@ -32,6 +32,10 @@ Dependencies (installed manually, no renv/DESCRIPTION). App: `shiny`, `shinyjs`,
 
 `shinyWidgets` and `shinycssloaders` were removed from `global.R` - nothing in the app called them. `geodata` is no longer loaded at app start either; it is a `setup.R` dependency. Keep it that way: every `library()` in `global.R` is bundled into the shinyapps.io deployment and paid for on cold start.
 
+## `docs/decisions/`
+
+Architecture decision records, one file per decision with real alternatives (layout, ledger shape, entry modes, validation, blank/NA semantics, evaluation instrumentation, PDF sidecar, region list, project file, rule parsing, no AI in the extraction path). Records are not edited after acceptance; a change gets a new superseding record. Write one when a change alters a recorded decision or introduces a new one with trade-offs.
+
 ## `analysis/`
 
 Manuscript/validation code, deliberately outside the app: `app.R` sources only `global.R` and an explicit list of `R/mod_*.R`, so nothing here is ever loaded by the running application. `parse_ncdc_benchmark.R` recovers the page-1 figures from NCDC sitreps (national totals, states/LGAs affected, named states) as ground truth for scoring an extraction. Every field fails soft into a `parse_flags` column rather than a silent `NA`.
