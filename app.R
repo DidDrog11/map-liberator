@@ -4,6 +4,7 @@
 # ------------------------------------------------------------------------------
 
 source("global.R")
+source("R/mod_schema.R")
 source("R/mod_controls.R")
 source("R/mod_map_engine.R")
 source("R/mod_sidecar.R")
@@ -15,7 +16,7 @@ ui <- fluidPage(
   theme = bslib::bs_theme(version = 5, bootswatch = "flatly"),
   
   # CSS
-  tags$head(tags$style(HTML("a
+  tags$head(tags$style(HTML("
     /* 1. General Styles */
     .image-container { 
       width: 100%; height: 85vh; overflow: auto; 
@@ -115,23 +116,43 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   
   # --- MODULE SETUP ---
-  controls_out <- controls_server("ctrl")
+  # Two reactiveVal bridges break circular dependencies between modules that
+  # each both produce and consume project state:
+  #   bridge_data      workbench produces the ledger; state manager saves it
+  #   restored_schema  state manager loads a schema; controls restores it
+  # Neither module can be constructed before the other, so the value passes
+  # through a plain reactiveVal owned here instead.
+  restored_schema <- reactiveVal(NULL)
+  bridge_data     <- reactiveVal(data.frame())
+  
+  controls_out <- controls_server("ctrl", restore_schema = restored_schema)
   map_out <- map_engine_server("map", controls_output = controls_out)
   
-  # State Management Bridge
-  bridge_data <- reactiveVal(data.frame())
-  state_out <- state_manager_server("state", data_to_save = bridge_data)
+  # State Management. The schema travels with the ledger so a multi-session
+  # extraction resumes against identical variable definitions.
+  state_out <- state_manager_server(
+    "state",
+    data_to_save   = bridge_data,
+    schema_to_save = reactive(list(
+      schema_text = controls_out$schema_text(),
+      rules_text  = controls_out$rules_text()
+    ))
+  )
+  
+  observe({ req(state_out$schema()); restored_schema(state_out$schema()) })
+  
+  # Sidecar. Initialised before the workbench because the workbench stamps
+  # each committed row with the reference image currently on screen.
+  sidecar_out <- sidecar_server("sidecar")
   
   # Workbench
   wb_out <- workbench_server("workbench", 
                              map_source = map_out, 
                              controls_output = controls_out,
-                             loaded_state = state_out)
+                             loaded_state = state_out$ledger,
+                             sidecar_source = sidecar_out)
   
   observe({ req(wb_out()); bridge_data(wb_out()) })
-  
-  # Sidecar
-  sidecar_server("sidecar")
   
   # --- MAP RESIZE LOGIC (NON-DESTRUCTIVE) ---
   observeEvent(input$toggle_size, {

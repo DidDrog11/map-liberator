@@ -19,7 +19,14 @@ controls_ui <- function(id) {
           textInput(ns("meta_month"), "Month", placeholder = "MM (or XX)"),
           textInput(ns("meta_day"), "Day", placeholder = "DD (or XX)")
         ),
-        textInput(ns("meta_source"), "Source ID", placeholder = "e.g. SitRep 42")
+        # Epi week is recorded separately from the calendar date. Weekly
+        # surveillance reports are indexed by epidemiological week, and
+        # synthesising a date from it (as earlier versions did) loses the
+        # reporting period and makes week-level joins unreliable.
+        splitLayout(
+          numericInput(ns("meta_week"), "Epi Week", value = NA, min = 1, max = 53, step = 1),
+          textInput(ns("meta_source"), "Source ID", placeholder = "e.g. SitRep 42")
+        )
       ),
       
       # --- PANEL 2: GEOGRAPHY (Setup & Navigation) ---
@@ -53,25 +60,55 @@ controls_ui <- function(id) {
         "Data Attributes",
         icon = icon("pen-to-square"),
         
-        # Inputs
-        textInput(ns("var_name"), "Variable Name:", value = "status", placeholder = "e.g. cases, presence"),
-        selectInput(ns("var_type"), "Data Type:", choices = c("Binary (Present)"="binary", "Numeric (Count)"="numeric", "Text"="text")),
-        uiOutput(ns("var_value_ui")),
+        # Two capture modes. "single" paints one variable across a batch of
+        # selected regions, which suits a choropleth where many regions share
+        # a value. "form" opens a validated, schema-driven form for one region
+        # at a time, which is what a tabulated source requires when each region
+        # carries several different values.
+        radioButtons(ns("entry_mode"), "Entry Mode:",
+                     choices = c("Single variable (batch)" = "single",
+                                 "Multi-variable form"     = "form"),
+                     selected = "single"),
+
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'single'", ns("entry_mode")),
+          textInput(ns("var_name"), "Variable Name:", value = "status", placeholder = "e.g. cases, presence"),
+          selectInput(ns("var_type"), "Data Type:", choices = c("Binary (Present)"="binary", "Numeric (Count)"="numeric", "Text"="text")),
+          uiOutput(ns("var_value_ui"))
+        ),
+
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'form'", ns("entry_mode")),
+          schema_ui(ns("schema"))
+        ),
         
         hr(),
         
-        # Action (Moved here)
-        actionButton(ns("add_to_project"), "Add Data to Ledger", class = "btn-success", width = "100%", icon = icon("plus-circle"))
+        # Batch mode commits explicitly; form mode commits per region from
+        # the modal, so the button would be ambiguous there.
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'single'", ns("entry_mode")),
+          actionButton(ns("add_to_project"), "Add Data to Ledger", class = "btn-success", width = "100%", icon = icon("plus-circle"))
+        ),
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'form'", ns("entry_mode")),
+          div(class = "text-muted", style = "font-size: 12px; text-align: center; font-style: italic;",
+              "Click a region on the map to enter its values.")
+        )
       )
     )
   )
 }
 
-controls_server <- function(id) {
+controls_server <- function(id, restore_schema = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
     updateSelectizeInput(session, "country", choices = country_vec, selected = "GBR", server = TRUE)
+
+    # Schema module is nested inside the control panel: the declared variable
+    # set is part of the extraction setup, alongside country and admin level.
+    schema_out <- schema_server("schema", restore = restore_schema)
     
     # --- DYNAMIC DATA INPUT UI ---
     output$var_value_ui <- renderUI({
@@ -317,13 +354,24 @@ controls_server <- function(id) {
           year = input$meta_year, 
           month = input$meta_month, 
           day = input$meta_day, 
+          week = input$meta_week,
           source = input$meta_source,
           var_name = input$var_name,
           var_value = input$var_value
         )
       }),
       add_trigger  = reactive(input$add_to_project),
-      clear_trigger = reactive(input$clear_map)
+      clear_trigger = reactive(input$clear_map),
+
+      # Form-mode contract consumed by the workbench.
+      entry_mode   = reactive(input$entry_mode),
+      schema       = schema_out$schema,
+      rules        = schema_out$rules,
+      schema_valid = schema_out$valid,
+
+      # Raw declaration text, so the state manager can persist it verbatim.
+      schema_text  = schema_out$schema_text,
+      rules_text   = schema_out$rules_text
     )
   })
 }

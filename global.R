@@ -4,16 +4,15 @@
 # ------------------------------------------------------------------------------
 
 library(shiny)
-library(shinyWidgets)
 library(leaflet)
 library(bslib)
 library(sf)
 library(terra)
-library(geodata)
+# geodata is required only by setup.R (boundary download); not loaded here so
+# that app start-up and the deployment bundle stay lean.
 library(dplyr)
 library(shinyjs)
 library(countrycode)
-library(shinycssloaders)
 library(DT)
 library(base64enc)
 
