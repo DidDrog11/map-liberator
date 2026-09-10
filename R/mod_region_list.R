@@ -25,6 +25,15 @@ region_list_ui <- function(id) {
     div(class = "text-muted", style = "font-size: 12px; margin-bottom: 6px;",
         "Click a row to enter its values (form mode) or select several rows and use ",
         "Add Data to Ledger (batch mode). Type in the search box to filter by name."),
+    radioButtons(ns("order_mode"),
+                 hint_label("Order:", title = "Row order",
+                            tags$p(tags$b("A to Z:"), " alphabetical by name."),
+                            tags$p(class = "mb-0", tags$b("Recently entered first:"), " regions in the order ",
+                                   "you entered them for earlier files, most recent at the top, ",
+                                   "then the rest alphabetically. Entries for the current file do ",
+                                   "not move rows, so the order stays put while you work through a report.")),
+                 choices = c("A to Z" = "alpha", "Recently entered first" = "recent"),
+                 selected = "alpha", inline = TRUE),
     DT::DTOutput(ns("tbl"))
   )
 }
@@ -54,7 +63,31 @@ region_list_server <- function(id, geom_data, entry_mode, ledger = NULL, image =
       if (length(parents)) {
         out$Within <- do.call(paste, c(lapply(rev(parents), function(cn) as.character(d[[cn]])), sep = " / "))
       }
-      out[order(out$Region), ]
+      out <- out[order(out$Region), ]
+
+      if (identical(input$order_mode, "recent")) {
+        last <- last_entered()
+        key  <- last[out$layerId]
+        # Most recent first; never-entered regions (NA) keep alphabetical order at the bottom.
+        out <- out[order(is.na(key), -as.numeric(key), out$Region), ]
+      }
+      out
+    })
+
+    # Most recent commit time per region across files OTHER than the current
+    # one. Excluding the current file keeps the order stable during a report:
+    # a row does not jump to the top the moment it is entered.
+    last_entered <- reactive({
+      led <- if (is.function(ledger)) ledger() else NULL
+      if (is.null(led) || nrow(led) == 0 || !all(c("Timestamp", "Region_ID") %in% names(led))) {
+        return(setNames(as.POSIXct(character(0)), character(0)))
+      }
+      img <- if (is.function(image)) image()$file_name else NA_character_
+      if (!is.na(img) && "Image_File" %in% names(led)) led <- led[!(led$Image_File %in% img), , drop = FALSE]
+      if (nrow(led) == 0) return(setNames(as.POSIXct(character(0)), character(0)))
+      ts <- as.POSIXct(led$Timestamp, format = "%Y-%m-%dT%H:%M:%S%z")
+      agg <- tapply(ts, led$Region_ID, max)
+      setNames(as.POSIXct(agg, origin = "1970-01-01"), names(agg))
     })
 
     # Variables recorded for each region against the current image.
@@ -89,8 +122,9 @@ region_list_server <- function(id, geom_data, entry_mode, ledger = NULL, image =
         selection = "multiple",
         # All rows, no paging: the enclosing frame scrolls, so every region is
         # reachable by scrolling or by the search box without changing page.
-        options   = list(paging = FALSE, dom = "ft",
-                         order = list(list(0, "asc")), scrollX = TRUE)
+        # No client-side initial sort: the data frame arrives in the order
+        # chosen above, and row indices must map back to it.
+        options   = list(paging = FALSE, dom = "ft", order = list(), scrollX = TRUE)
       )
     }, server = FALSE)
 

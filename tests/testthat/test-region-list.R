@@ -61,3 +61,30 @@ test_that("an empty layer renders a placeholder rather than erroring", {
     expect_equal(session$returned$selected(), character(0))
   })
 })
+
+test_that("recently-entered ordering follows earlier files and ignores the current one", {
+  led <- data.frame(
+    Region_ID  = c("NGA.12_1", "NGA.28_1", "NGA.6_1"),
+    Image_File = c("w05.pdf",  "w05.pdf",  "w06.pdf"),
+    Timestamp  = c("2026-09-10T10:00:00+0200", "2026-09-10T10:05:00+0200", "2026-09-10T11:00:00+0200"),
+    stringsAsFactors = FALSE
+  )
+  shiny::testServer(region_list_server, args = list(
+    geom_data  = reactive(test_geometry()),
+    entry_mode = reactive("form"),
+    ledger     = reactive(led),
+    image      = reactive(list(file_name = "w06.pdf"))
+  ), {
+    session$setInputs(order_mode = "alpha")
+    expect_equal(regions()$Region, c("Bauchi", "Edo", "Ondo"))
+
+    # Bauchi's only entry is for the current file, so it is treated as never
+    # entered; Ondo was entered after Edo in w05, so it comes first.
+    session$setInputs(order_mode = "recent")
+    expect_equal(regions()$Region, c("Ondo", "Edo", "Bauchi"))
+
+    # Row indices still map to the displayed order.
+    session$setInputs(tbl_rows_selected = 1L)
+    expect_equal(session$returned$click()$id, "NGA.28_1")
+  })
+})
