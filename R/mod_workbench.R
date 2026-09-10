@@ -23,7 +23,10 @@
 #   Variable, Value       what was recorded
 #   Entry_Mode            "single" or "form" - how the value was captured
 #   Image_File            reference image on screen at commit time (provenance)
-#   Secs_Since_Image_Load elapsed time since that image was loaded (efficiency)
+#   Secs_Since_Image_Load active time since that image was loaded, net of any
+#                         clock pauses in the sidecar (efficiency)
+#   Secs_Paused           total paused seconds at commit; add to the above to
+#                         recover raw elapsed time
 # ------------------------------------------------------------------------------
 
 workbench_ui <- function(id) {
@@ -50,6 +53,12 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
     # validation is the evidence behind any claim that typed entry reduces
     # transcription error.
     rejections <- reactiveVal(0L)
+
+    # Optional in the controls contract, so older callers and test mocks that
+    # omit it behave as "blank is refused".
+    blank_zero_on <- function() {
+      is.function(controls_output$blank_zero) && isTRUE(controls_output$blank_zero())
+    }
 
     # Region awaiting entry in form mode: list(id, name).
     pending_region <- reactiveVal(NULL)
@@ -79,13 +88,25 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
     }
 
     # --- HELPER: image provenance ----------------------------------------
+    # Active seconds = elapsed since load, minus completed pauses, minus the
+    # pause in progress (if any). A sidecar that predates the clock, or a test
+    # mock, may omit the pause fields; they are treated as "never paused".
     current_image <- function() {
       img <- if (is.function(sidecar_source)) sidecar_source() else NULL
+      if (is.null(img) || is.na(img$loaded_at)) {
+        return(list(file = if (!is.null(img)) img$file_name else NA_character_,
+                    secs = NA_real_, paused = NA_real_))
+      }
+      now     <- Sys.time()
+      elapsed <- as.numeric(difftime(now, img$loaded_at, units = "secs"))
+      paused  <- if (!is.null(img$paused_secs)) img$paused_secs else 0
+      if (!is.null(img$paused_at) && !is.na(img$paused_at)) {
+        paused <- paused + as.numeric(difftime(now, img$paused_at, units = "secs"))
+      }
       list(
-        file = if (!is.null(img)) img$file_name else NA_character_,
-        secs = if (!is.null(img) && !is.na(img$loaded_at)) {
-          round(as.numeric(difftime(Sys.time(), img$loaded_at, units = "secs")), 1)
-        } else NA_real_
+        file   = img$file_name,
+        secs   = round(elapsed - paused, 1),
+        paused = round(paused, 1)
       )
     }
 
@@ -110,6 +131,7 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
         Entry_Mode            = mode,
         Image_File            = img$file,
         Secs_Since_Image_Load = img$secs,
+        Secs_Paused           = img$paused,
         stringsAsFactors      = FALSE
       )
     }
@@ -147,7 +169,22 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
       showNotification(paste("Added", length(ids), "rows to ledger."), type = "message")
     })
 
+    # --- HELPER: existing entries for a region against the current file ---
+    # A region's values are keyed by (Region_ID, Image_File): the same state
+    # legitimately appears once per report. Rows with no image match only
+    # rows with no image. Returns a logical index into the ledger.
+    existing_rows <- function(id) {
+      d <- project_data()
+      if (nrow(d) == 0) return(logical(0))
+      img <- current_image()$file
+      same_img <- if (is.na(img)) is.na(d$Image_File) else !is.na(d$Image_File) & d$Image_File == img
+      d$Region_ID == id & same_img
+    }
+
     # --- 2. FORM MODE: OPEN ON REGION CLICK -------------------------------
+    # Clicking a region that already has values for the current file opens
+    # the form pre-filled, and submitting replaces those rows. Without this a
+    # correction would append a second set and leave the ledger ambiguous.
     observeEvent(map_source$click(), {
       req(identical(controls_output$entry_mode(), "form"))
 
@@ -161,15 +198,27 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
       }
 
       region_name <- resolve_region_names(click$id, controls_output$geom_data())[1]
-      pending_region(list(id = click$id, name = region_name))
       form_errors(character(0))
 
+      prior   <- project_data()[existing_rows(click$id), , drop = FALSE]
+      current <- setNames(as.character(prior$Value), prior$Variable)
+      editing <- length(current) > 0
+      pending_region(list(id = click$id, name = region_name, editing = editing))
+
+      prefill <- function(v) {
+        if (!v %in% names(current)) return("")
+        if (is.na(current[[v]])) "NA" else current[[v]]
+      }
+
       showModal(modalDialog(
-        title = tagList(icon("pen-to-square"), " ", region_name),
+        title = tagList(icon(if (editing) "pen" else "pen-to-square"), " ", region_name,
+                        if (editing) span(class = "badge bg-warning text-dark ms-2", "editing")),
         size = "s",
         easyClose = FALSE,
 
-        div(class = "text-muted", style = "font-size: 11px; margin-bottom: 10px;", click$id),
+        div(class = "text-muted", style = "font-size: 11px; margin-bottom: 10px;",
+            click$id,
+            if (editing) tagList(br(), "Existing values shown; submitting replaces them.")),
 
         # Numeric fields use textInput rather than numericInput so that invalid
         # entries survive to validation and can be reported, instead of being
@@ -177,11 +226,17 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
         lapply(seq_len(nrow(sch)), function(i) {
           v <- sch[i, ]
           if (v$type == "ordinal") {
-            selectInput(ns(paste0("fld_", v$name)), v$name,
-                        choices = trimws(strsplit(v$levels, "|", fixed = TRUE)[[1]]))
+            lv <- trimws(strsplit(v$levels, "|", fixed = TRUE)[[1]])
+            selectInput(ns(paste0("fld_", v$name)), v$name, choices = lv,
+                        selected = if (prefill(v$name) %in% lv) prefill(v$name) else NULL)
           } else {
+            is_num    <- v$type %in% c("count", "numeric", "binary")
+            zero_hint <- blank_zero_on() && is_num
             textInput(ns(paste0("fld_", v$name)),
-                      label = paste0(v$name, " (", v$type, ")"), value = "")
+                      label = paste0(v$name, " (", v$type,
+                                     if (zero_hint) ", blank = 0",
+                                     if (is_num) ", NA = not reported", ")"),
+                      value = prefill(v$name), placeholder = if (zero_hint) "0" else "")
           }
         }),
 
@@ -189,7 +244,8 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
 
         footer = tagList(
           modalButton("Cancel"),
-          actionButton(ns("form_submit"), "Add to Ledger", class = "btn-success", icon = icon("plus"))
+          actionButton(ns("form_submit"), if (editing) "Update Ledger" else "Add to Ledger",
+                       class = "btn-success", icon = icon(if (editing) "check" else "plus"))
         )
       ))
     })
@@ -215,7 +271,8 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
       errs   <- character(0)
       for (i in seq_len(nrow(sch))) {
         v   <- sch[i, ]
-        res <- validate_value(input[[paste0("fld_", v$name)]], v$type, v$levels)
+        res <- validate_value(input[[paste0("fld_", v$name)]], v$type, v$levels,
+                              blank_zero = blank_zero_on())
         if (res$ok) {
           values[[v$name]] <- res$value
         } else {
@@ -238,6 +295,16 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
         return()
       }
 
+      # Replace, not append: drop this region's prior rows for the current
+      # file for the variables being submitted. Rows for variables no longer
+      # in the schema are left alone.
+      drop <- existing_rows(region$id)
+      if (any(drop)) {
+        d <- project_data()
+        drop <- drop & d$Variable %in% names(values)
+        if (any(drop)) project_data(d[!drop, , drop = FALSE])
+      }
+
       append_rows(build_rows(
         ids       = region$id,
         names     = region$name,
@@ -248,7 +315,8 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
 
       removeModal()
       pending_region(NULL)
-      showNotification(paste0("Added ", length(values), " values for ", region$name, "."), type = "message")
+      showNotification(paste0(if (isTRUE(region$editing)) "Updated " else "Added ",
+                              length(values), " values for ", region$name, "."), type = "message")
     })
 
     # --- 4. LOAD STATE ----------------------------------------------------

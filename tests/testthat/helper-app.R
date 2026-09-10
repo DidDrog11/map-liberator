@@ -51,7 +51,8 @@ mock_controls <- function(entry_mode = "single",
                           metadata = test_metadata(),
                           schema = parse_schema_text("status, binary"),
                           rules = NULL,
-                          geometry = test_geometry()) {
+                          geometry = test_geometry(),
+                          blank_zero = FALSE) {
   if (is.null(rules)) rules <- parse_rules_text("", schema)
   list(
     geom_data    = reactive(geometry),
@@ -60,12 +61,22 @@ mock_controls <- function(entry_mode = "single",
     entry_mode   = reactive(entry_mode),
     schema       = reactive(schema),
     rules        = reactive(rules),
-    schema_valid = reactive(TRUE)
+    schema_valid = reactive(TRUE),
+    blank_zero   = reactive(blank_zero)
   )
 }
 
-mock_sidecar <- function(file_name = "wk52.png", seconds_ago = 30) {
-  reactive(list(file_name = file_name, loaded_at = Sys.time() - seconds_ago))
+# `paused_secs` is completed pause time; `paused_for` > 0 means the clock is
+# currently paused and has been for that many seconds.
+mock_sidecar <- function(file_name = "wk52.png", seconds_ago = 30,
+                         paused_secs = 0, paused_for = 0) {
+  now <- Sys.time()
+  reactive(list(
+    file_name   = file_name,
+    loaded_at   = now - seconds_ago,
+    paused_at   = if (paused_for > 0) now - paused_for else as.POSIXct(NA),
+    paused_secs = paused_secs
+  ))
 }
 
 # Path to the NCDC report bundled for the tutorial; used as a parser fixture.

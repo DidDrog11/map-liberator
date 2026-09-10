@@ -65,15 +65,36 @@ controls_ui <- function(id) {
         # a value. "form" opens a validated, schema-driven form for one region
         # at a time, which is what a tabulated source requires when each region
         # carries several different values.
-        radioButtons(ns("entry_mode"), "Entry Mode:",
-                     choices = c("Single variable (batch)" = "single",
-                                 "Multi-variable form"     = "form"),
-                     selected = "single"),
+        radioButtons(
+          ns("entry_mode"),
+          hint_label(
+            "Entry Mode:", title = "Which mode to use",
+            tags$p(tags$b("Paint one value:"), " select several regions on the map, ",
+                   "then add one variable with one value to all of them at once. ",
+                   "Use this for a choropleth or presence map, where many regions share a value."),
+            tags$p(tags$b("Form per region:"), " declare the variables first, then click ",
+                   "a single region and fill in all its values in a form. ",
+                   "Use this for a table or labelled map, where each region carries several different values."),
+            tags$p(class = "mb-0", "Both modes write to the same ledger and can be mixed in one project.")
+          ),
+          choices = c("Paint one value onto selected regions" = "single",
+                      "Fill in a form for each region"        = "form"),
+          selected = "single"),
 
         conditionalPanel(
           condition = sprintf("input['%s'] == 'single'", ns("entry_mode")),
-          textInput(ns("var_name"), "Variable Name:", value = "status", placeholder = "e.g. cases, presence"),
-          selectInput(ns("var_type"), "Data Type:", choices = c("Binary (Present)"="binary", "Numeric (Count)"="numeric", "Text"="text")),
+          textInput(ns("var_name"),
+                    hint_label("Variable Name:",
+                               "The column this value is recorded under, for example ",
+                               tags$code("cases"), " or ", tags$code("presence"),
+                               ". Reuse the same name across batches so the values line up in the export."),
+                    value = "status", placeholder = "e.g. cases, presence"),
+          selectInput(ns("var_type"),
+                      hint_label("Data Type:",
+                                 tags$b("Binary"), ": the region has the feature (recorded as 1). ",
+                                 tags$b("Numeric"), ": a count or measurement. ",
+                                 tags$b("Text"), ": a category or label read from the legend."),
+                      choices = c("Binary (Present)"="binary", "Numeric (Count)"="numeric", "Text"="text")),
           uiOutput(ns("var_value_ui"))
         ),
 
@@ -371,7 +392,8 @@ controls_server <- function(id, restore_schema = NULL) {
 
       # Raw declaration text, so the state manager can persist it verbatim.
       schema_text  = schema_out$schema_text,
-      rules_text   = schema_out$rules_text
+      rules_text   = schema_out$rules_text,
+      blank_zero   = schema_out$blank_zero
     )
   })
 }

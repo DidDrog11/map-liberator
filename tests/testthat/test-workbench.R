@@ -4,7 +4,7 @@
 
 LEDGER_COLS <- c("Timestamp", "Project", "Source", "Date_Ref", "Epi_Week",
                  "Region_ID", "Region_Name", "Variable", "Value", "Entry_Mode",
-                 "Image_File", "Secs_Since_Image_Load")
+                 "Image_File", "Secs_Since_Image_Load", "Secs_Paused")
 
 test_that("batch mode writes one row per selected region", {
   add <- reactiveVal(0)
@@ -47,6 +47,40 @@ test_that("committed rows carry epi week and image provenance", {
     expect_lt(d$Secs_Since_Image_Load, 120)
     # ISO 8601 with a UTC offset, so ordering survives across sessions.
     expect_match(d$Timestamp, "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{4}$")
+  })
+})
+
+test_that("clock pauses are subtracted from active time and recorded", {
+  add <- reactiveVal(0)
+
+  # 90 s since load, 30 s of completed pauses, and a pause still running for 10 s.
+  shiny::testServer(workbench_server, args = list(
+    map_source      = list(selected = reactive("NGA.6_1"), click = reactive(NULL)),
+    controls_output = mock_controls("single", add_trigger = reactive(add())),
+    loaded_state    = reactive(NULL),
+    sidecar_source  = mock_sidecar("wk52.png", seconds_ago = 90,
+                                   paused_secs = 30, paused_for = 10)
+  ), {
+    add(1); session$flushReact()
+    d <- session$returned()
+
+    expect_gte(d$Secs_Since_Image_Load, 49)
+    expect_lt(d$Secs_Since_Image_Load, 60)
+    expect_gte(d$Secs_Paused, 40)
+    expect_lt(d$Secs_Paused, 50)
+  })
+
+  # A sidecar without pause fields (older code, simpler mocks) is "never paused".
+  shiny::testServer(workbench_server, args = list(
+    map_source      = list(selected = reactive("NGA.6_1"), click = reactive(NULL)),
+    controls_output = mock_controls("single", add_trigger = reactive(add())),
+    loaded_state    = reactive(NULL),
+    sidecar_source  = reactive(list(file_name = "old.png", loaded_at = Sys.time() - 20))
+  ), {
+    add(1); session$flushReact()
+    d <- session$returned()
+    expect_gte(d$Secs_Since_Image_Load, 19)
+    expect_equal(d$Secs_Paused, 0)
   })
 })
 
@@ -181,5 +215,94 @@ test_that("a loaded ledger replaces the session ledger", {
     session$flushReact()
     expect_equal(nrow(session$returned()), 1)
     expect_equal(session$returned()$Region_ID, "NGA.1_1")
+  })
+})
+
+test_that("blank numeric fields commit as 0 when the schema allows it, and are refused otherwise", {
+  sch <- parse_schema_text("suspected, count\nconfirmed, count\ndeaths, count")
+
+  shiny::testServer(workbench_server, args = list(
+    map_source      = list(selected = reactive(character(0)),
+                           click    = reactive(list(id = "NGA.28_1"))),
+    controls_output = mock_controls("form", schema = sch, blank_zero = TRUE),
+    loaded_state    = reactive(NULL),
+    sidecar_source  = NULL
+  ), {
+    session$flushReact()
+    session$setInputs(fld_suspected = "8", fld_confirmed = "", fld_deaths = "")
+    session$setInputs(form_submit = 1)
+
+    d <- session$returned()
+    expect_equal(d$Value, c("8", "0", "0"))
+    expect_match(output$quality_msg, "0 entries rejected")
+  })
+
+  shiny::testServer(workbench_server, args = list(
+    map_source      = list(selected = reactive(character(0)),
+                           click    = reactive(list(id = "NGA.28_1"))),
+    controls_output = mock_controls("form", schema = sch, blank_zero = FALSE),
+    loaded_state    = reactive(NULL),
+    sidecar_source  = NULL
+  ), {
+    session$flushReact()
+    session$setInputs(fld_suspected = "8", fld_confirmed = "", fld_deaths = "")
+    session$setInputs(form_submit = 1)
+
+    expect_equal(nrow(session$returned()), 0)
+    expect_match(output$quality_msg, "1 entries rejected")
+  })
+})
+
+test_that("NA typed into a numeric field is committed as missing, distinct from blank-as-zero", {
+  sch <- parse_schema_text("suspected, count\nconfirmed, count\ndeaths, count")
+
+  shiny::testServer(workbench_server, args = list(
+    map_source      = list(selected = reactive(character(0)),
+                           click    = reactive(list(id = "NGA.28_1"))),
+    controls_output = mock_controls("form", schema = sch, blank_zero = TRUE),
+    loaded_state    = reactive(NULL),
+    sidecar_source  = NULL
+  ), {
+    session$flushReact()
+    session$setInputs(fld_suspected = "40", fld_confirmed = "", fld_deaths = "NA")
+    session$setInputs(form_submit = 1)
+
+    d <- session$returned()
+    expect_equal(d$Variable, c("suspected", "confirmed", "deaths"))
+    expect_equal(d$Value[1:2], c("40", "0"))
+    expect_true(is.na(d$Value[3]))
+  })
+})
+
+test_that("re-entering a region for the same file replaces its rows instead of appending", {
+  sch <- parse_schema_text("suspected, count\nconfirmed, count")
+  click <- reactiveVal(NULL)
+
+  shiny::testServer(workbench_server, args = list(
+    map_source      = list(selected = reactive(character(0)), click = click),
+    controls_output = mock_controls("form", schema = sch),
+    loaded_state    = reactive(NULL),
+    sidecar_source  = mock_sidecar("w01.pdf")
+  ), {
+    click(list(id = "NGA.28_1", nonce = 1)); session$flushReact()
+    session$setInputs(fld_suspected = "10", fld_confirmed = "2")
+    session$setInputs(form_submit = 1)
+    expect_equal(nrow(session$returned()), 2)
+
+    # Second click on the same region: the form is pre-filled from the ledger.
+    click(list(id = "NGA.28_1", nonce = 2)); session$flushReact()
+    expect_true(pending_region()$editing)
+    expect_equal(unname(setNames(project_data()$Value, project_data()$Variable)["suspected"]), "10")
+
+    session$setInputs(fld_suspected = "12", fld_confirmed = "2")
+    session$setInputs(form_submit = 2)
+
+    d <- session$returned()
+    expect_equal(nrow(d), 2)
+    expect_equal(d$Value[d$Variable == "suspected"], "12")
+
+    # A different region is a fresh entry, not an edit.
+    click(list(id = "NGA.12_1", nonce = 3)); session$flushReact()
+    expect_false(pending_region()$editing)
   })
 })

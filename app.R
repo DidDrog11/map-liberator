@@ -7,6 +7,7 @@ source("global.R")
 source("R/mod_schema.R")
 source("R/mod_controls.R")
 source("R/mod_map_engine.R")
+source("R/mod_region_list.R")
 source("R/mod_sidecar.R")
 source("R/mod_workbench.R")
 source("R/mod_state_manager.R")
@@ -19,7 +20,7 @@ ui <- fluidPage(
   tags$head(tags$style(HTML("
     /* 1. General Styles */
     .image-container { 
-      width: 100%; height: 85vh; overflow: auto; 
+      width: 100%; height: 50vh; min-height: 320px; overflow: auto; 
       border: 2px dashed #ccc; background-color: #f9f9f9; 
       display: flex; align-items: center; justify-content: center;
       cursor: grab; 
@@ -36,8 +37,8 @@ ui <- fluidPage(
     }
     
     /* 3. Height States */
-    #map_container.height-normal { height: 500px !important; }
-    #map_container.height-large  { height: 85vh  !important; }
+    #map_container.height-normal { height: 50vh; min-height: 320px; }
+    #map_container.height-large  { height: 85vh; }
     
     /* 4. Expand Button */
     .map-expand-btn {
@@ -74,8 +75,34 @@ ui <- fluidPage(
                   tabPanel("Workspace", icon = icon("map"),
                            br(),
                            fluidRow(
-                             div(id = "map_col", class = "col-sm-12", 
-                                 
+                             div(id = "map_col", class = "col-sm-12",
+
+                                 # Map or list: two ways to pick a region that
+                                 # feed the same workbench. The list suits a
+                                 # tabular source, where the name is known and
+                                 # locating the polygon is a wasted step.
+                                 div(style = "display: flex; align-items: center; gap: 12px; margin-bottom: 4px;",
+                                     radioButtons("view_mode", NULL, inline = TRUE,
+                                                  choices = c("Map" = "map", "Region list" = "list"),
+                                                  selected = "map"),
+                                     hint_label("", title = "Map or list",
+                                                tags$p("Both views pick regions for the same ledger."),
+                                                tags$p(tags$b("Map:"), " click polygons. Best when the source is itself a map."),
+                                                tags$p(class = "mb-0", tags$b("Region list:"), " click a name, with a search box. ",
+                                                       "Best when the source is a table. The Entered column shows how many ",
+                                                       "values each region already has for the current reference image."))
+                                 ),
+
+                                 # Region list (hidden until chosen)
+                                 shinyjs::hidden(
+                                   # Same height as the sidecar's PDF frame, so the
+                                   # source and the region rows sit side by side and
+                                   # the list scrolls within its own frame.
+                                   div(id = "list_container",
+                                       style = "height: 75vh; min-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 6px;",
+                                       region_list_ui("regions"))
+                                 ),
+
                                  # Map Container (default: normal height)
                                  div(id = "map_container", class = "map-wrapper height-normal",
                                      
@@ -145,13 +172,45 @@ server <- function(input, output, session) {
   # each committed row with the reference image currently on screen.
   sidecar_out <- sidecar_server("sidecar")
   
+  # Region list: the tabular alternative to the map. It reads the ledger (via
+  # bridge_data) and the current image so it can mark regions already entered.
+  list_out <- region_list_server("regions",
+                                 geom_data  = controls_out$geom_data,
+                                 entry_mode = controls_out$entry_mode,
+                                 ledger     = bridge_data,
+                                 image      = sidecar_out)
+
+  # The workbench sees one region source. Clicks are forwarded as events from
+  # whichever view produced them, so switching views never replays an old
+  # click; the batch selection is simply that of the view on screen.
+  last_click <- reactiveVal(NULL)
+  observeEvent(map_out$click(),  { last_click(map_out$click()) })
+  observeEvent(list_out$click(), { last_click(list_out$click()) })
+  region_source <- list(
+    click    = last_click,
+    selected = reactive({
+      if (identical(input$view_mode, "list")) list_out$selected() else map_out$selected()
+    })
+  )
+
+  observeEvent(input$view_mode, {
+    shinyjs::toggle("list_container", condition = input$view_mode == "list")
+    shinyjs::toggle("map_container",  condition = input$view_mode == "map")
+    if (input$view_mode == "map") {
+      runjs("setTimeout(function() {
+        var $map = $('#map_col').find('.leaflet-container');
+        if ($map.length > 0) { var inst = HTMLWidgets.getInstance($map[0]); if (inst) inst.getMap().invalidateSize(); }
+      }, 100);")
+    }
+  }, ignoreInit = TRUE)
+
   # Workbench
-  wb_out <- workbench_server("workbench", 
-                             map_source = map_out, 
+  wb_out <- workbench_server("workbench",
+                             map_source = region_source,
                              controls_output = controls_out,
                              loaded_state = state_out$ledger,
                              sidecar_source = sidecar_out)
-  
+
   observe({ req(wb_out()); bridge_data(wb_out()) })
   
   # --- MAP RESIZE LOGIC (NON-DESTRUCTIVE) ---

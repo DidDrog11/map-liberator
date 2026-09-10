@@ -79,10 +79,52 @@ map_engine_server <- function(id, controls_output) {
       return(map_obj)
     }
     
+    # --- BASEMAP ---
+    # CARTO watermarks raster tiles requested without a key (since Aug 2026).
+    # With CARTO_API_KEY set (locally via .Renviron, on shinyapps.io via the
+    # app's environment variables) Positron is used. Without a key, or when
+    # the keyed tiles fail in the browser (a key restricted to another
+    # referrer, for instance), OpenStreetMap is used instead. The fallback
+    # has to happen client-side: the server cannot know whether the viewer's
+    # browser was able to fetch the tiles.
+    osm_url  <- "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    osm_attr <- '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+
+    add_basemap <- function(map_obj) {
+      key <- Sys.getenv("CARTO_API_KEY", unset = "")
+      if (!nzchar(key)) {
+        return(addTiles(map_obj, urlTemplate = osm_url, attribution = osm_attr,
+                        options = tileOptions(maxZoom = 19)))
+      }
+      map_obj |>
+        addTiles(
+          urlTemplate = paste0(
+            "https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png?key=", key),
+          attribution = paste0(
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, ',
+            '&copy; <a href="https://carto.com/attributions">CARTO</a>'),
+          options = tileOptions(subdomains = "abcd", maxZoom = 20)
+        ) |>
+        htmlwidgets::onRender(sprintf("
+          function(el, x) {
+            var map = this, errors = 0, swapped = false;
+            map.eachLayer(function(l) {
+              if (!(l instanceof L.TileLayer) || !l._url || l._url.indexOf('cartocdn') < 0) return;
+              l.on('tileerror', function() {
+                if (swapped || ++errors < 3) return;
+                swapped = true;
+                map.removeLayer(l);
+                L.tileLayer('%s', {attribution: '%s', maxZoom: 19}).addTo(map);
+                console.warn('CARTO tiles failed to load; using OpenStreetMap instead.');
+              });
+            });
+          }", osm_url, gsub("'", "\\\\'", osm_attr)))
+    }
+
     # --- A. INITIAL RENDER ---
     output$map <- renderLeaflet({
       m <- leaflet(options = leafletOptions(preferCanvas = TRUE)) |>
-        addProviderTiles(providers$CartoDB.Positron) |>
+        add_basemap() |>
         setView(lng = 0, lat = 20, zoom = 3) |>
         addMapPane("context_pane", zIndex = 390) |>
         addMapPane("geom_pane", zIndex = 400)

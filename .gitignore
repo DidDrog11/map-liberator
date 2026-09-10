@@ -53,3 +53,7 @@ data/gadm
 
 # Manuscript folder
 manuscript/
+
+# NCDC sitrep PDFs (analysis/download_ncdc_sitreps.R); manifest.csv is kept
+data/sitreps/*.pdf
+data/sitreps/png/

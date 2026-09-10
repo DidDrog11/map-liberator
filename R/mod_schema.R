@@ -147,13 +147,32 @@ parse_rules_text <- function(txt, schema) {
 
 # --- VALIDATION ---------------------------------------------------------------
 
-# validate_value(value, type, levels)
+# validate_value(value, type, levels, blank_zero)
 #   Returns list(ok, msg, value) with `value` coerced to its canonical string
 #   form so the ledger stays a tidy character column.
-validate_value <- function(value, type, levels = "") {
+#   `blank_zero` records an empty numeric field as 0 instead of refusing it.
+#   Sources such as the NCDC Table 3 leave zero cells blank, so without it the
+#   operator would type "0" into most cells of every table and each slip
+#   would count as a validation rejection.
+validate_value <- function(value, type, levels = "", blank_zero = FALSE) {
   raw <- if (is.null(value) || length(value) == 0) "" else trimws(as.character(value)[1])
 
-  if (!nzchar(raw)) return(list(ok = FALSE, msg = "is required", value = NA_character_))
+  numeric_types <- c("count", "numeric", "binary")
+
+  if (!nzchar(raw)) {
+    if (isTRUE(blank_zero) && type %in% numeric_types) {
+      return(list(ok = TRUE, msg = "", value = "0"))
+    }
+    return(list(ok = FALSE, msg = "is required", value = NA_character_))
+  }
+
+  # An explicit "NA" records a missing value: the source did not report this
+  # variable at all (a table with no deaths column), which is different from
+  # a blank cell in a column that exists (zero). Numeric types only; a text
+  # or ordinal field that was not reported is simply left out of the form.
+  if (toupper(raw) == "NA" && type %in% numeric_types) {
+    return(list(ok = TRUE, msg = "", value = NA_character_))
+  }
 
   if (type == "text") return(list(ok = TRUE, msg = "", value = raw))
 
@@ -226,7 +245,21 @@ schema_ui <- function(id) {
   ns <- NS(id)
   tagList(
     textAreaInput(
-      ns("schema_text"), "Variables (one per line: name, type)",
+      ns("schema_text"),
+      hint_label(
+        "Variables (one per line: name, type)", title = "Declaring variables",
+        tags$p("Each line names one value the form will ask for, followed by its type. ",
+               "The type decides which entries are accepted:"),
+        tags$ul(
+          tags$li(tags$code("count"), ": whole numbers, zero or more"),
+          tags$li(tags$code("numeric"), ": any number"),
+          tags$li(tags$code("binary"), ": present or absent"),
+          tags$li(tags$code("ordinal"), ": one of a fixed list, given after a third comma as ",
+                  tags$code("low|medium|high")),
+          tags$li(tags$code("text"), ": free text")
+        ),
+        tags$p(class = "mb-0", "Example: ", tags$code("confirmed, count"))
+      ),
       value = "status, binary",
       rows = 5, width = "100%",
       placeholder = "confirmed, count\nband, ordinal, none|low|high"
@@ -235,9 +268,28 @@ schema_ui <- function(id) {
         paste("Types:", paste(SCHEMA_TYPES, collapse = ", "))),
 
     textAreaInput(
-      ns("rules_text"), "Consistency rules (optional)",
+      ns("rules_text"),
+      hint_label(
+        "Consistency rules (optional)", title = "Cross-field checks",
+        tags$p("One comparison per line between two declared variables, or a variable and a number. ",
+               "A form entry that breaks a rule is refused and counted in the ledger header."),
+        tags$p(class = "mb-0", "Examples: ", tags$code("deaths <= confirmed"), ", ",
+               tags$code("confirmed <= 5000"))
+      ),
       value = "", rows = 2, width = "100%",
       placeholder = "confirmed <= suspected"
+    ),
+
+    checkboxInput(
+      ns("blank_zero"),
+      hint_label("Blank numeric fields record as 0",
+                 "Tick this when the source leaves zero cells empty, as the NCDC ",
+                 "state tables do. An empty count, numeric or binary field is then ",
+                 "recorded as 0 instead of being refused. Text and ordinal fields ",
+                 "are still required. Type ", tags$code("NA"), " into a numeric field ",
+                 "when the source does not report that variable at all, so it is ",
+                 "recorded as missing rather than zero."),
+      value = FALSE
     ),
 
     uiOutput(ns("schema_status"))
@@ -256,6 +308,7 @@ schema_ui <- function(id) {
 #   valid        TRUE when every declared line parses cleanly
 #   schema_text  raw declaration text, for persistence
 #   rules_text   raw rule text, for persistence
+#   blank_zero   TRUE when empty numeric fields should be recorded as 0
 schema_server <- function(id, restore = NULL) {
   moduleServer(id, function(input, output, session) {
 
@@ -312,7 +365,8 @@ schema_server <- function(id, restore = NULL) {
       rules       = rules,
       valid       = valid,
       schema_text = reactive(input$schema_text),
-      rules_text  = reactive(input$rules_text)
+      rules_text  = reactive(input$rules_text),
+      blank_zero  = reactive(isTRUE(input$blank_zero))
     )
   })
 }

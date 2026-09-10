@@ -146,3 +146,32 @@ test_that("rules over non-numeric variables are skipped rather than failed", {
   r <- parse_rules_text("note <= confirmed", s)
   expect_length(check_rules(c(note = "abc", confirmed = "5"), r, s), 0)
 })
+
+test_that("blank_zero records empty numeric fields as 0 but still requires text", {
+  for (ty in c("count", "numeric", "binary")) {
+    res <- validate_value("", ty, blank_zero = TRUE)
+    expect_true(res$ok, info = ty)
+    expect_equal(res$value, "0", info = ty)
+  }
+  expect_false(validate_value("", "text", blank_zero = TRUE)$ok)
+  expect_false(validate_value("", "ordinal", "low|high", blank_zero = TRUE)$ok)
+  # Off by default: a blank count is refused.
+  expect_false(validate_value("", "count")$ok)
+  # A typed value is unaffected by the flag.
+  expect_equal(validate_value("7", "count", blank_zero = TRUE)$value, "7")
+})
+
+test_that("an explicit NA records a missing value for numeric types only", {
+  for (ty in c("count", "numeric", "binary")) {
+    res <- validate_value("NA", ty)
+    expect_true(res$ok, info = ty)
+    expect_true(is.na(res$value), info = ty)
+  }
+  expect_true(validate_value("na", "count")$ok)
+  expect_equal(validate_value("NA", "text")$value, "NA")   # text is taken literally
+  expect_false(validate_value("NA", "ordinal", "low|high")$ok)
+  # Rules involving a missing value are skipped, not violated.
+  sch <- parse_schema_text("confirmed, count\ndeaths, count")
+  rules <- parse_rules_text("deaths <= confirmed", sch)
+  expect_length(check_rules(c(confirmed = "18", deaths = NA_character_), rules, sch), 0)
+})

@@ -8,13 +8,14 @@ library(leaflet)
 library(bslib)
 library(sf)
 library(terra)
-# geodata is required only by setup.R (boundary download); not loaded here so
-# that app start-up and the deployment bundle stay lean.
 library(dplyr)
 library(shinyjs)
 library(countrycode)
 library(DT)
 library(base64enc)
+
+# Situation reports run to several MB; Shiny's default upload cap is 5 MB.
+options(shiny.maxRequestSize = 50 * 1024^2)
 
 # 1. DEFINE CACHE PATH
 LOCAL_CACHE_DIR <- file.path(getwd(), "data", "gadm")
@@ -117,6 +118,20 @@ country_df <- countrycode::codelist |>
 country_vec <- setNames(as.list(country_df$code), country_df$name)
 
 # 4. Helper: Create Rich Tooltip
+# hint_label(label, ..., title): an input label followed by a small question
+# mark that opens a popover holding the explanation passed in `...`. Used for
+# controls whose purpose is not obvious from the label alone.
+hint_label <- function(label, ..., title = NULL) {
+  tags$span(
+    label, " ",
+    bslib::popover(
+      tags$a(href = "#", onclick = "return false;", class = "text-muted",
+             style = "font-size: 0.85em;", icon("circle-question")),
+      ..., title = title, placement = "right"
+    )
+  )
+}
+
 add_hierarchy_label <- function(sf_obj) {
   # Pre-allocate character vector
   n <- nrow(sf_obj)
@@ -128,6 +143,10 @@ add_hierarchy_label <- function(sf_obj) {
     sf_obj$NAME_0
   } else if("COUNTRY" %in% names(sf_obj)) {
     sf_obj$COUNTRY
+  } else if("GID_0" %in% names(sf_obj)) {
+    # Files aggregated by setup.R keep only the ISO3 code, not the name.
+    nm <- countrycode::countrycode(sf_obj$GID_0, "iso3c", "country.name", warn = FALSE)
+    ifelse(is.na(nm), sf_obj$GID_0, nm)
   } else {
     rep("N/A", n)
   }
