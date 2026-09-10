@@ -2,7 +2,7 @@
 # Ledger construction in both entry modes, provenance stamping, and the
 # validation gate that stands between operator input and the ledger.
 
-LEDGER_COLS <- c("Timestamp", "Project", "Source", "Date_Ref", "Epi_Week",
+LEDGER_COLS <- c("Timestamp", "Project", "Source", "Date_Ref", "Date_End", "Epi_Week",
                  "Region_ID", "Region_Name", "Variable", "Value", "Entry_Mode",
                  "Image_File", "Secs_Since_Image_Load", "Secs_Paused")
 
@@ -304,5 +304,29 @@ test_that("re-entering a region for the same file replaces its rows instead of a
     # A different region is a fresh entry, not an edit.
     click(list(id = "NGA.12_1", nonce = 3)); session$flushReact()
     expect_false(pending_region()$editing)
+  })
+})
+
+test_that("a period end is recorded when given and NA for a single-date report", {
+  add <- reactiveVal(0)
+  base <- list(map_source   = list(selected = reactive("NGA.6_1"), click = reactive(NULL)),
+               loaded_state = reactive(NULL), sidecar_source = NULL)
+
+  shiny::testServer(workbench_server, args = c(base, list(
+    controls_output = mock_controls("single", add_trigger = reactive(add()))
+  )), {
+    add(1); session$flushReact()
+    expect_equal(session$returned()$Date_Ref, "2025-12-28")
+    expect_true(is.na(session$returned()$Date_End))
+  })
+
+  shiny::testServer(workbench_server, args = c(base, list(
+    controls_output = mock_controls("single", add_trigger = reactive(add()),
+                                    metadata = test_metadata(year = "2025", month = "12", day = "01",
+                                                             end_year = "2025", end_month = "12", end_day = "31"))
+  )), {
+    add(1); session$flushReact()
+    expect_equal(session$returned()$Date_Ref, "2025-12-01")
+    expect_equal(session$returned()$Date_End, "2025-12-31")
   })
 })

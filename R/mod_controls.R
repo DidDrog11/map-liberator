@@ -14,10 +14,23 @@ controls_ui <- function(id) {
         "Project Metadata",
         icon = icon("clipboard-list"),
         textInput(ns("project_name"), "Project Name", value = "My_Extraction"),
+        # Reference period. A weekly report needs one date; a monthly bulletin
+        # or a cumulative report spans two, so an optional end date follows.
+        # Left blank, the row's period is the single date.
+        hint_label("Reference date (or period start)",
+                   "The date the values describe. For a report covering more than ",
+                   "one day, give its first day here and its last day under ",
+                   tags$b("Period end"), ". Use XX for an unknown month or day."),
         splitLayout(
           textInput(ns("meta_year"), "Year", value = format(Sys.Date(), "%Y")),
           textInput(ns("meta_month"), "Month", placeholder = "MM (or XX)"),
           textInput(ns("meta_day"), "Day", placeholder = "DD (or XX)")
+        ),
+        span(class = "text-muted", style = "font-size: 12px;", "Period end (optional)"),
+        splitLayout(
+          textInput(ns("meta_end_year"), NULL, placeholder = "YYYY"),
+          textInput(ns("meta_end_month"), NULL, placeholder = "MM"),
+          textInput(ns("meta_end_day"), NULL, placeholder = "DD")
         ),
         # Epi week is recorded separately from the calendar date. Weekly
         # surveillance reports are indexed by epidemiological week, and
@@ -372,9 +385,12 @@ controls_server <- function(id, restore_schema = NULL) {
       metadata = reactive({
         list(
           project = input$project_name, 
-          year = input$meta_year, 
-          month = input$meta_month, 
-          day = input$meta_day, 
+          year = input$meta_year,
+          month = input$meta_month,
+          day = input$meta_day,
+          end_year  = input$meta_end_year,
+          end_month = input$meta_end_month,
+          end_day   = input$meta_end_day,
           week = input$meta_week,
           source = input$meta_source,
           var_name = input$var_name,

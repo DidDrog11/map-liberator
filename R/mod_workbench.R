@@ -17,7 +17,8 @@
 # Ledger schema (one row per region per variable):
 #   Timestamp             ISO 8601 datetime the row was committed
 #   Project, Source       operator-supplied metadata
-#   Date_Ref, Epi_Week    reference period the value describes
+#   Date_Ref, Epi_Week    reference date (or period start) the value describes
+#   Date_End              period end, NA for a single-date report
 #   Region_ID             GADM GID at the target level; the join key
 #   Region_Name           resolved administrative name (deepest available)
 #   Variable, Value       what was recorded
@@ -110,6 +111,14 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
       )
     }
 
+    # End of the reference period, or NA when the operator left it blank
+    # (a single-date report). Older callers without the end fields get NA.
+    period_end <- function(meta) {
+      parts <- c(meta$end_year, meta$end_month, meta$end_day)
+      if (length(parts) < 3 || all(is.null(parts)) || !any(nzchar(trimws(parts)))) return(NA_character_)
+      paste(parts, collapse = "-")
+    }
+
     # --- HELPER: assemble ledger rows -------------------------------------
     # `ids`, `variables` and `values` are recycled against each other, so this
     # serves both modes: one variable across many regions, and many variables
@@ -123,6 +132,7 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
         Project               = meta$project,
         Source                = meta$source,
         Date_Ref              = paste(meta$year, meta$month, meta$day, sep = "-"),
+        Date_End              = period_end(meta),
         Epi_Week              = if (is.null(meta$week) || is.na(meta$week)) NA_integer_ else as.integer(meta$week),
         Region_ID             = ids,
         Region_Name           = names,
