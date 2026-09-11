@@ -73,6 +73,55 @@
   })
 }
 
+# Early-2020 layout (weeks 1 to 6): Table 1 is a single current-week row
+# with suspected, confirmed, deaths, CFR and "State: N", laid out in columns
+# whose values wrap onto different text lines, so the line-based pattern
+# above cannot see them (and mis-fires on Table 2 instead). Read the words
+# between the Table 1 and Table 2 captions by position instead.
+.is_early_layout <- function(page_text) {
+  grepl("Table\\s*1:\\s*Summary of current week indicators", page_text, perl = TRUE)
+}
+
+.parse_table1_early <- function(path) {
+  w <- tryCatch(pdftools::pdf_data(path)[[1]], error = function(e) NULL)
+  empty <- list(suspected = NA_integer_, confirmed = NA_integer_,
+                probable = NA_integer_, deaths = NA_integer_, cfr = NA_real_,
+                states = NA_integer_, lgas = NA_integer_)
+  if (is.null(w) || nrow(w) == 0) return(empty)
+
+  cap <- function(num) {
+    i <- which(w$text == "Table")
+    i <- i[seq_along(i) %in% which(grepl(paste0("^", num, ":?$"), w$text[pmin(i + 1, nrow(w))]))]
+    if (length(i) == 0) NA_real_ else w$y[i[1]]
+  }
+  y1 <- cap(1); y2 <- cap(2)
+  if (is.na(y1)) return(empty)
+  if (is.na(y2)) y2 <- Inf
+  body <- w[w$y > y1 & w$y < y2, ]
+  if (nrow(body) == 0) return(empty)
+
+  # Labelled counts: the number to the right of "State:" / "LGA:" on its line.
+  labelled <- function(label) {
+    i <- which(grepl(paste0("^", label, "\\(?s?\\)?:?$"), body$text, perl = TRUE))
+    if (length(i) == 0) return(NA_integer_)
+    same <- body[abs(body$y - body$y[i[1]]) < 3 & body$x > body$x[i[1]], ]
+    .as_int(same$text[grepl("^\\d+$", same$text)][1])
+  }
+  states <- labelled("State"); lgas <- labelled("LGA")
+
+  # Remaining integers left to right: suspected, confirmed, deaths. Values in
+  # parentheses (negatives) and the labelled counts are excluded.
+  is_int <- grepl("^\\d[\\d,]*$", body$text, perl = TRUE)
+  label_x <- body$x[grepl("^(State|LGA)", body$text)]
+  vals <- body[is_int & (length(label_x) == 0 | body$x < min(label_x, Inf)), ]
+  vals <- vals[order(vals$x), ]
+  cfr  <- .as_num(sub("%$", "", body$text[grepl("^[\\d.]+%$", body$text, perl = TRUE)][1]))
+
+  list(suspected = .as_int(.nth(vals$text, 1)), confirmed = .as_int(.nth(vals$text, 2)),
+       probable = NA_integer_, deaths = .as_int(.nth(vals$text, 3)), cfr = cfr,
+       states = states, lgas = lgas)
+}
+
 # --- HIGHLIGHTS ---------------------------------------------------------------
 # The narrative bullets name the states reporting confirmed cases in the week,
 # e.g. "These were reported in Bauchi, Ondo, Ebonyi, Taraba and Nasarawa
@@ -107,11 +156,21 @@ parse_ncdc_sitrep <- function(path) {
   epi_week <- .as_int(.first_match("Epi\\s*Week:?\\s*(\\d{1,2})", p1))
   year     <- .as_int(.first_match("Epi\\s*Week:?\\s*\\d{1,2}\\s+(\\d{4})", p1))
 
-  rows <- .parse_table1_rows(lines)
+  early <- .is_early_layout(p1)
+  if (early) {
+    e    <- .parse_table1_early(path)
+    na_row <- list(suspected = NA_integer_, confirmed = NA_integer_,
+                   probable = NA_integer_, deaths = NA_integer_, cfr = NA_real_)
+    rows   <- list(e[c("suspected", "confirmed", "probable", "deaths", "cfr")], na_row, na_row)
+    states <- e$states
+    lgas   <- e$lgas
+  } else {
+    rows <- .parse_table1_rows(lines)
 
-  # State(s):N and LGA(s):N appear once per Table 1 row, in the same order.
-  states <- .as_int(.all_matches("State\\(s\\)\\s*:\\s*(\\d+)", lines))
-  lgas   <- .as_int(.all_matches("LGA\\(s\\)\\s*:\\s*(\\d+)",   lines))
+    # State(s):N and LGA(s):N appear once per Table 1 row, in the same order.
+    states <- .as_int(.all_matches("State\\(s\\)\\s*:\\s*(\\d+)", lines))
+    lgas   <- .as_int(.all_matches("LGA\\(s\\)\\s*:\\s*(\\d+)",   lines))
+  }
 
   named <- .parse_named_states(p1)
 
@@ -166,6 +225,13 @@ parse_ncdc_sitrep <- function(path) {
   # Internal consistency: the narrative list should match the tabulated count.
   if (!is.na(out$wk_states) && length(named) > 0 && length(named) != out$wk_states) {
     flags <- c(flags, "named_states_count_mismatch")
+  }
+
+  # The early layout has no cumulative/prior-year rows in Table 1 (they are
+  # in Table 2, not parsed), so those flags are expected; say why instead.
+  if (early) {
+    flags <- setdiff(flags, c("table1_cumulative_row", "table1_prior_year_row"))
+    flags <- c("early_layout", flags)
   }
 
   out$parse_flags <- paste(flags, collapse = ";")
