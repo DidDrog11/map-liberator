@@ -115,6 +115,24 @@ into the sidecar. The file name carries the year and epi week, and is
 stamped on every ledger row, so the ledger can be joined back to the report
 without relying on the metadata panel being updated each time.
 
+## Completing the state-by-week grid (analysis, not extraction)
+
+Only regions the source reports are entered (decision record 0012), so the
+ledger is completed to a full grid afterwards. The rule runs per document
+and per variable, and depends on what the ledger says about that variable
+in that document:
+
+| entered values for the variable | unentered states | explicit NA states |
+|---|---|---|
+| all NA | NA: the report gave no state breakdown | NA |
+| none NA | 0: the report enumerated the variable by state | (none) |
+| a mix | 0: the enumeration exists | stay NA: the operator saw no usable value for that state |
+
+Above the rule: a week with no document in the ledger is NA for everything,
+and the late-report variables (`confirmed_late`, `deaths_late`) follow the
+same logic as any other enumerated variable. The mixed case should be rare;
+list its occurrences and check why they arose before trusting them.
+
 ## Timing protocol
 
 The clock starts when the page image is uploaded. Pause it (sidebar button)
