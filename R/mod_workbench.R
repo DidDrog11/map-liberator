@@ -383,7 +383,9 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
     output$ledger_table <- DT::renderDT({
       req(project_data())
       DT::datatable(project_data(),
-                    options = list(pageLength = 5, scrollX = TRUE),
+                    # stateSave keeps sort order, page length and page across
+                    # re-renders; the table is rebuilt on every ledger change.
+                    options = list(pageLength = 5, scrollX = TRUE, stateSave = TRUE),
                     rownames = FALSE,
                     selection = "multiple")
     })
