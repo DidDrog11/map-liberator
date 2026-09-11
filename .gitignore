@@ -59,3 +59,4 @@ manuscript/
 data/sitreps/*.pdf
 data/sitreps/png/
 data/sitreps/to_extract/
+analysis/local/
