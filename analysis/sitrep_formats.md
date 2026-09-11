@@ -72,6 +72,29 @@ protocol.
   block is the cheaper exercise. Cumulative figures are a useful cross-check
   at year end (week 52 cumulative should equal the sum of weekly values).
 
+## 2017 to 2019: per-state figures from the Highlights text
+
+The weekly per-state figures are in the "In the reporting week" bullet on
+page 1: confirmed cases by state, then deaths by state, and in 2017 suspected
+cases by state. The list is a complete enumeration, so a state named for
+confirmed cases but absent from the deaths list had zero deaths that week.
+National figures with no state breakdown (suspected in 2018 and 2019, and
+deaths in sentences such as "with 14 deaths were recorded from eight States
+Edo (11), ...") are entered as `NA` for every state.
+
+- **Deaths are deaths among confirmed cases**, as in the later tables. A
+  death described as a probable case is not recorded.
+- **Late reports.** Sentences such as "Taraba state reported seven additional
+  confirmed cases with 5 deaths that were not previously reported" are not
+  that week's figures. They are recorded under separate variables,
+  `confirmed_late` and `deaths_late`, against the report that carried them,
+  and the week's own confirmed and deaths for that state are 0. What to do
+  with late reports is then an analysis decision made once.
+- **File names run one week ahead of the page in 2017 and 2018.** Enter the
+  week printed on the page.
+- Five 2017 reports (weeks 7, 8, 32, 40, 44) carry a small text table of new
+  confirmed cases by state; it is the same information as the sentence.
+
 ## Recommended app setup for the 2020 week 7 onward era
 
 Geography: Nigeria, Admin 1. Entry mode: form per region. Schema:
