@@ -386,6 +386,9 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
                     # stateSave keeps sort order, page length and page across
                     # re-renders; the table is rebuilt on every ledger change.
                     options = list(pageLength = 5, scrollX = TRUE, stateSave = TRUE),
+                    # Per-column filter boxes: checking one document or one
+                    # region across weeks is the normal correction workflow.
+                    filter = "top",
                     rownames = FALSE,
                     selection = "multiple")
     })

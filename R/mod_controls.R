@@ -134,9 +134,58 @@ controls_ui <- function(id) {
   )
 }
 
-controls_server <- function(id, restore_schema = NULL) {
+# metadata_from_rows(ledger, file)
+#   The metadata a document's existing ledger rows were stamped with, as a
+#   list of input values, or NULL when the ledger has no rows for that file.
+#   Used to refill the metadata panel when a document is reloaded, so rows
+#   added later carry the same source, dates and week as the earlier ones.
+metadata_from_rows <- function(ledger, file) {
+  if (is.null(ledger) || nrow(ledger) == 0 || is.null(file) || is.na(file)) return(NULL)
+  if (!"Image_File" %in% names(ledger)) return(NULL)
+  rows <- ledger[!is.na(ledger$Image_File) & ledger$Image_File == file, , drop = FALSE]
+  if (nrow(rows) == 0) return(NULL)
+  last <- rows[nrow(rows), ]                    # most recently committed row
+  split_date <- function(x) {
+    if (is.null(x) || is.na(x) || !nzchar(x)) return(c("", "", ""))
+    p <- strsplit(as.character(x), "-", fixed = TRUE)[[1]]
+    c(p, "", "", "")[1:3]
+  }
+  ref <- split_date(last$Date_Ref)
+  end <- split_date(if ("Date_End" %in% names(last)) last$Date_End else NA)
+  list(
+    project = if (is.null(last$Project) || is.na(last$Project)) "" else last$Project,
+    source  = if (is.null(last$Source)  || is.na(last$Source))  "" else last$Source,
+    year = ref[1], month = ref[2], day = ref[3],
+    end_year = end[1], end_month = end[2], end_day = end[3],
+    week = if (is.null(last$Epi_Week) || is.na(last$Epi_Week)) NA_integer_ else as.integer(last$Epi_Week)
+  )
+}
+
+# controls_server(id, restore_schema, restore_metadata)
+#   restore_schema    reactive: schema/rules/project name from a loaded project
+#   restore_metadata  reactive: metadata list (see metadata_from_rows) to
+#                     push into the panel when a document with earlier rows
+#                     is loaded
+controls_server <- function(id, restore_schema = NULL, restore_metadata = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    if (is.function(restore_metadata)) {
+      observeEvent(restore_metadata(), {
+        m <- restore_metadata()
+        req(!is.null(m))
+        updateTextInput(session, "project_name",   value = m$project)
+        updateTextInput(session, "meta_source",    value = m$source)
+        updateTextInput(session, "meta_year",      value = m$year)
+        updateTextInput(session, "meta_month",     value = m$month)
+        updateTextInput(session, "meta_day",       value = m$day)
+        updateTextInput(session, "meta_end_year",  value = m$end_year)
+        updateTextInput(session, "meta_end_month", value = m$end_month)
+        updateTextInput(session, "meta_end_day",   value = m$end_day)
+        updateNumericInput(session, "meta_week",   value = m$week)
+        showNotification("Metadata set from this document's earlier rows.", type = "message")
+      })
+    }
     
     updateSelectizeInput(session, "country", choices = country_vec, selected = "GBR", server = TRUE)
 

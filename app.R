@@ -152,7 +152,12 @@ server <- function(input, output, session) {
   restored_schema <- reactiveVal(NULL)
   bridge_data     <- reactiveVal(data.frame())
   
-  controls_out <- controls_server("ctrl", restore_schema = restored_schema)
+  # When a document that already has ledger rows is loaded, the metadata
+  # panel is refilled from those rows, so later additions match earlier ones.
+  document_meta <- reactiveVal(NULL)
+
+  controls_out <- controls_server("ctrl", restore_schema = restored_schema,
+                                  restore_metadata = document_meta)
   map_out <- map_engine_server("map", controls_output = controls_out)
   
   # State Management. The schema travels with the ledger so a multi-session
@@ -173,6 +178,11 @@ server <- function(input, output, session) {
   # Sidecar. Initialised before the workbench because the workbench stamps
   # each committed row with the reference image currently on screen.
   sidecar_out <- sidecar_server("sidecar")
+
+  observeEvent(sidecar_out()$file_name, {
+    m <- metadata_from_rows(bridge_data(), sidecar_out()$file_name)
+    if (!is.null(m)) document_meta(m)
+  }, ignoreInit = TRUE)
   
   # Region list: the tabular alternative to the map. It reads the ledger (via
   # bridge_data) and the current image so it can mark regions already entered.

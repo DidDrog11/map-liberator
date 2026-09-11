@@ -1,15 +1,15 @@
 year,week,variable,ledger_sum,table1_week,table3_total,verdict,note
-2020,3,confirmed,79,81,,,
-2020,4,confirmed,97,95,,,
-2020,7,deaths,16,18,,,
-2020,8,deaths,4,13,4,source inconsistent,Table 3 lists 4 deaths and its Total row agrees; Table 1 says 13
-2020,10,suspected,363,364,,,
-2020,11,confirmed,50,51,,,
-2020,13,suspected,177,182,,,
-2020,13,confirmed,18,19,,,
-2020,14,suspected,92,93,,,
-2020,16,suspected,86,89,,,
-2020,17,suspected,82,83,,,
-2020,17,confirmed,7,8,,,
-2020,52,suspected,63,64,,,
-2020,52,deaths,0,1,,,
+2020,3,confirmed,79,81,81,extraction fail,Missed delta state
+2020,4,confirmed,97,95,95,extraction fail,Benue was 1 not 3
+2020,7,deaths,16,18,18,extraction fail,Missed 1 death in Sokoto and Kebbi
+2020,8,deaths,4,13,4,source inconsistent,Table 3 lists 4 deaths and its Total row agrees
+2020,10,suspected,363,364,364,extraction fail,Missed 1 suspected in Anambra
+2020,11,confirmed,50,51,51,extraction fail,Missed 1 confirmed in Ondo
+2020,13,suspected,177,182,182,extraction fail,Missed Taraba
+2020,13,confirmed,18,19,19,extraction fail,Missed Taraba
+2020,14,suspected,92,93,93,extraction fail,Missed FCT
+2020,16,suspected,86,89,89,extraction fail,Missed Nasarawa and Ogun
+2020,17,suspected,82,83,85,extraction fail,Missed Kogi and Jigawa
+2020,17,confirmed,7,8,8,extraction fail,Missed Kogi and Jigawa
+2020,52,suspected,63,64,64,extraction fail,Missed Imo
+2020,52,deaths,0,1,1,extraction fail,Missed death in Ondo

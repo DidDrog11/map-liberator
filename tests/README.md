@@ -216,3 +216,19 @@ otherwise they skip, so a green run without pdftools is not full coverage.
 - **a corpus run keeps unreadable reports as flagged rows.** A bad PDF is a
   row with a flag, not a missing row.
 - **a missing file is an error, not a silent empty result.**
+
+## Control panel helpers (`test-controls.R`)
+
+### Domain rules
+
+- [ ] **metadata_from_rows recovers the panel values a document's rows were
+  stamped with.** Loading a document that already has ledger rows refills
+  the metadata panel (project, source, dates, epi week) from its most
+  recent row, so later additions match the earlier ones.
+
+### Plumbing
+
+- **metadata_from_rows is NULL for an unknown document, an empty ledger, or
+  no file**, so a new document leaves the panel as the operator set it.
+- **metadata_from_rows tolerates rows without a period end or with XX date
+  parts.**
