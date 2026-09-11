@@ -51,9 +51,10 @@ ul.task-list li input[type="checkbox"] {
   <li><a href="#project-management" id="toc-project-management" class="nav-link" data-scroll-target="#project-management">1. Project Management</a></li>
   <li><a href="#project-metadata" id="toc-project-metadata" class="nav-link" data-scroll-target="#project-metadata">2. Project Metadata</a></li>
   <li><a href="#geography-scope" id="toc-geography-scope" class="nav-link" data-scroll-target="#geography-scope">3. Geography Scope</a></li>
-  <li><a href="#the-reference-map" id="toc-the-reference-map" class="nav-link" data-scroll-target="#the-reference-map">4. The Reference Map</a></li>
-  <li><a href="#data-extraction" id="toc-data-extraction" class="nav-link" data-scroll-target="#data-extraction">5. Data Extraction</a></li>
-  <li><a href="#the-data-ledger" id="toc-the-data-ledger" class="nav-link" data-scroll-target="#the-data-ledger">6. The Data Ledger</a></li>
+  <li><a href="#the-source-document" id="toc-the-source-document" class="nav-link" data-scroll-target="#the-source-document">4. The Source Document</a></li>
+  <li><a href="#choosing-regions-map-or-list" id="toc-choosing-regions-map-or-list" class="nav-link" data-scroll-target="#choosing-regions-map-or-list">5. Choosing Regions: Map or List</a></li>
+  <li><a href="#data-extraction" id="toc-data-extraction" class="nav-link" data-scroll-target="#data-extraction">6. Data Extraction</a></li>
+  <li><a href="#the-data-ledger" id="toc-the-data-ledger" class="nav-link" data-scroll-target="#the-data-ledger">7. The Data Ledger</a></li>
   </ul></li>
   </ul>
 </nav>
@@ -81,93 +82,91 @@ ul.task-list li input[type="checkbox"] {
 
 <section id="introduction" class="level2">
 <h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
-<p>Map Liberator is a tool for extracting spatial data (counts, presence/absence, or notes) from static map images (like Situation Reports) by matching them to official administrative boundaries.</p>
-<p>This guide uses a standard workflow: extracting Lassa Fever case data from a <a href="https://ncdc.gov.ng/themes/common/files/sitreps/04beb529df54f4ceb99ac291842640b4.pdf">Nigeria NCDC Situation Report</a>.</p>
+<p>Map Liberator is a tool for extracting data (counts, presence/absence, categories or notes) from static documents such as situation reports, by matching each value to an official administrative boundary. The source can be a map or a table; the output is one tidy ledger either way.</p>
+<p>This guide follows one workflow: extracting Lassa fever case data from a <a href="https://ncdc.gov.ng/themes/common/files/sitreps/04beb529df54f4ceb99ac291842640b4.pdf">Nigeria NCDC Situation Report</a>.</p>
 <hr>
 <section id="project-management" class="level3 tutorial-box">
 <h3 class="anchored" data-anchor-id="project-management">1. Project Management</h3>
 <p><em>Located at the top of the Sidebar.</em></p>
-<p>Before starting, you can choose how to manage your session:</p>
 <ul>
-<li><strong>Load Project:</strong> If you have a previously saved <code>.rds</code> file, upload it here to restore your rows and settings.</li>
-<li><strong>Save Project:</strong> Click this at any time to download a snapshot of your current work (including the ledger and metadata).</li>
+<li><strong>Load Project:</strong> Upload a previously saved <code>.rds</code> file to restore your ledger, your variable schema, the project name and the blank-as-zero setting.</li>
+<li><strong>Save Project:</strong> Downloads a snapshot of your current work to your browser’s download folder. Save every few documents; each save is a new timestamped file.</li>
 </ul>
+<p>There is no autosave. Anything not saved is lost when the browser tab closes.</p>
 </section>
 <section id="project-metadata" class="level3 tutorial-box">
 <h3 class="anchored" data-anchor-id="project-metadata">2. Project Metadata</h3>
 <p><em>Sidebar Panel 1</em></p>
-<p>Define the context for the data you are about to extract. This Project Metadata is attached to every row you add to the ledger.</p>
+<p>Attached to every row you add to the ledger.</p>
 <ol type="1">
-<li><strong>Project Name:</strong> A unique name for this extraction task (e.g.&nbsp;<code>nigeria_lassa_2025</code>).</li>
-<li><strong>Date:</strong> The reference date of the source map (Year, Month, Day).</li>
-<li><strong>Source ID:</strong> A specific identifier for the document (e.g., <code>lassa_fevr_situation_report_epi_week_52_2025</code>).</li>
+<li><strong>Project Name:</strong> A name for this extraction task (e.g.&nbsp;<code>nigeria_lassa_2020</code>).</li>
+<li><strong>Reference date:</strong> The date the values describe. For a weekly report, one date is enough. For a document covering a longer period, give its first day here and its last day under <strong>Period end</strong>.</li>
+<li><strong>Epi Week:</strong> The epidemiological week printed on the report, recorded separately from the date.</li>
+<li><strong>Source ID:</strong> An identifier for the document (e.g.&nbsp;<code>lassa_sitrep_2020_w07</code>).</li>
 </ol>
 </section>
 <section id="geography-scope" class="level3 tutorial-box">
 <h3 class="anchored" data-anchor-id="geography-scope">3. Geography Scope</h3>
 <p><em>Sidebar Panel 2</em></p>
-<p>Set up the “Canvas” for your extraction using the Geography Scope panel.</p>
 <ol type="1">
-<li><strong>Country:</strong> Select the country from the dropdown (e.g.&nbsp;<code>Nigeria</code>).</li>
-<li><strong>Target Level:</strong> Choose the administrative level you need to interact with:
-<ul>
-<li><em>Admin 1:</em> States/Provinces.</li>
-<li><em>Admin 2:</em> Districts/LGAs.</li>
-<li><em>Admin 3:</em> Borough.</li>
-</ul></li>
-<li><strong>Filters (Optional):</strong> If you only need a specific part of the country (e.g., “England”), select it in the <strong>Filter</strong> dropdowns. This makes the map faster and less cluttered.</li>
-<li><strong>Actions:</strong>
-<ul>
-<li><strong>1. Load Data:</strong> Downloads and processes the boundaries.</li>
-<li><strong>2. Visualise Map:</strong> Draws the boundaries on the main screen.</li>
-<li><strong>3. Zoom:</strong> Recenters the map on your data.</li>
-</ul></li>
+<li><strong>Country:</strong> Select the country (e.g.&nbsp;<code>Nigeria</code>).</li>
+<li><strong>Target Level:</strong> The administrative level you will enter data against: <em>Admin 1</em> (states/provinces), <em>Admin 2</em> (districts/LGAs), <em>Admin 3</em>.</li>
+<li><strong>Filters (optional):</strong> Restrict to part of the country to make the map faster and less cluttered.</li>
+<li><strong>Actions:</strong> <strong>1. Load Data</strong> processes the boundaries; <strong>2. Visualise Map</strong> draws them; <strong>3. Zoom</strong> recentres.</li>
 </ol>
-<p><strong>Result:</strong> You will see the empty administrative boundaries ready for data entry.</p>
-<p><img src="tutorial_image_1.png" class="img-fluid" style="width:100.0%"> <em>Figure 1: The “Canvas” - Admin 2 boundaries loaded and ready.</em></p>
+<p><img src="tutorial_image_1.png" class="img-fluid" style="width:100.0%"> <em>Figure 1: Admin 2 boundaries loaded and ready.</em></p>
 </section>
-<section id="the-reference-map" class="level3 tutorial-box">
-<h3 class="anchored" data-anchor-id="the-reference-map">4. The Reference Map</h3>
-<p><em>Sidebar “Reference Map” Section</em></p>
-<p>If you are digitizing from an external image.</p>
-<p><strong>Load the Image</strong> 1. Scroll down to the <strong>Reference Map</strong> section. 2. <strong>Upload:</strong> Select your static map image (PNG/JPG). 3. <strong>Toggle:</strong> Click the blue <strong>Show/Hide Image</strong> button to open the split-screen view.</p>
-<p><strong>Align the Views</strong> 1. <strong>Map:</strong> Use the <strong>Expand Map</strong> button (bottom-right of the map) to enlarge the view. Zoom into a recognisable area (e.g., Edo State). 2. <strong>Image:</strong> Use the <strong>Rotate</strong> and <strong>Zoom</strong> sliders in the sidebar to orient the source image so “North” aligns with the interactive map.</p>
-<p><img src="tutorial_image_2.png" class="img-fluid" style="width:100.0%"> <em>Figure 2: The Split-Screen - Interactive map (left) aligned with the source SitRep (right).</em></p>
+<section id="the-source-document" class="level3 tutorial-box">
+<h3 class="anchored" data-anchor-id="the-source-document">4. The Source Document</h3>
+<p><em>Sidebar “Source Document” section</em></p>
+<p>The document you are extracting from, shown beside the map or region list.</p>
+<ol type="1">
+<li><strong>Upload:</strong> Select the source file. A <strong>PDF</strong> opens in your browser’s own viewer, with page navigation, zoom and search. An <strong>image</strong> (PNG/JPG) can be rotated and zoomed with the sliders and dragged to pan; double-click recentres it.</li>
+<li><strong>Show/Hide Source:</strong> Opens the split-screen view.</li>
+<li><strong>Clock:</strong> A timer starts when a file is uploaded and is stamped on each row you add. Use <strong>Pause clock</strong> when you stop extracting to read or look something up. This is mainly for evaluating the tool; you can ignore it.</li>
+</ol>
+<p>The file name is recorded on every row, so name your source files so they identify the document (for example by year and week).</p>
+<p><img src="tutorial_image_2.png" class="img-fluid" style="width:100.0%"> <em>Figure 2: The split-screen view, interactive map beside the source.</em></p>
+</section>
+<section id="choosing-regions-map-or-list" class="level3 tutorial-box">
+<h3 class="anchored" data-anchor-id="choosing-regions-map-or-list">5. Choosing Regions: Map or List</h3>
+<p><em>Above the main workspace</em></p>
+<p>Two ways to pick the region a value belongs to; both feed the same ledger.</p>
+<ul>
+<li><strong>Map:</strong> Click polygons. Best when the source is itself a map.</li>
+<li><strong>Region list:</strong> A searchable list of the loaded regions by name. Best when the source is a table: type the first letters of the name and click the row. The <strong>Entered</strong> column shows how many values each region already has for the current source document, and the list can be ordered alphabetically or by the order you entered regions in earlier documents.</li>
+</ul>
 </section>
 <section id="data-extraction" class="level3 tutorial-box">
-<h3 class="anchored" data-anchor-id="data-extraction">5. Data Extraction</h3>
-<p><em>Sidebar Panel 3 + Main Map</em></p>
-<p>This is the core workflow for adding data using the Data Attributes panel.</p>
+<h3 class="anchored" data-anchor-id="data-extraction">6. Data Extraction</h3>
+<p><em>Sidebar Panel 3</em></p>
+<p>Choose an <strong>Entry Mode</strong>:</p>
+<p><strong>Paint one value onto selected regions.</strong> For a map where many regions share a value.</p>
 <ol type="1">
-<li><strong>Define Attributes:</strong>
-<ul>
-<li><strong>Variable Name:</strong> What are you counting? (e.g., <code>confirmed_cases_binary</code>).</li>
-<li><strong>Data Type:</strong> Choose <em>Numeric</em> (for counts), <em>Binary</em> (for presence) or <em>Text</em> (for other data).</li>
-<li><strong>Value:</strong> Enter the value for the regions you are about to click (e.g., <code>1</code>).</li>
-</ul></li>
-<li><strong>Select Regions:</strong>
-<ul>
-<li>Click regions on the map. They will turn <strong>RED</strong>.</li>
-<li><em>Tip:</em> You can select multiple regions at once if they share the same value.</li>
-</ul></li>
-<li><strong>Add to Ledger:</strong>
-<ul>
-<li>Click the green <strong>Add Data to Ledger</strong> button.</li>
-<li>A notification will confirm success.</li>
-</ul></li>
+<li>Set <strong>Variable Name</strong>, <strong>Data Type</strong> and <strong>Value</strong> (e.g.&nbsp;<code>presence</code>, Binary, <code>1</code>).</li>
+<li>Select the regions on the map or in the list; selected regions turn red.</li>
+<li>Click <strong>Add Data to Ledger</strong>.</li>
 </ol>
-<p><img src="tutorial_image_3.png" class="img-fluid" style="width:100.0%"> <em>Figure 3: Selection - Target regions highlighted in RED vs.&nbsp;unselected grey regions.</em></p>
+<p><strong>Fill in a form for each region.</strong> For a table or labelled map where each region carries several values.</p>
+<ol type="1">
+<li>Declare your variables in the <strong>Variables</strong> box, one per line as <code>name, type</code>. Types are <code>count</code>, <code>numeric</code>, <code>binary</code>, <code>ordinal</code> (with levels, e.g.&nbsp;<code>band, ordinal, low|mid|high</code>) and <code>text</code>.</li>
+<li>Optionally add <strong>Consistency rules</strong> such as <code>confirmed &lt;= suspected</code>. An entry that breaks a rule is refused and counted.</li>
+<li>Click a region. A form opens with one field per variable. Fill it in and click <strong>Add to Ledger</strong>. Clicking a region that already has values for this document reopens its form pre-filled; submitting replaces the earlier values.</li>
+</ol>
+<p><strong>Empty cells and missing columns.</strong> Tick <strong>Blank numeric fields record as 0</strong> when the source leaves zero cells empty, as most surveillance tables do. Type <code>NA</code> into a field when the document does not report that variable at all, so it is recorded as missing rather than zero.</p>
+<p><strong>Which regions to enter.</strong> Our recommendation is to enter only the regions the document reports something for, and to leave the rest out of the ledger. A region with an empty row has not reported anything, and deciding that this means zero is an analysis step, made once and applied consistently, rather than an extraction step typed hundreds of times. Every row in your ledger then corresponds to something printed on the page. When you analyse the data, complete the region-by-period grid yourself, filling zero where the document covered the region and missing where it did not.</p>
+<p><img src="tutorial_image_3.png" class="img-fluid" style="width:100.0%"> <em>Figure 3: Selected regions highlighted in red.</em></p>
 </section>
 <section id="the-data-ledger" class="level3 tutorial-box">
-<h3 class="anchored" data-anchor-id="the-data-ledger">6. The Data Ledger</h3>
-<p><em>Located below the Map</em></p>
-<p>This table records every extraction you make.</p>
+<h3 class="anchored" data-anchor-id="the-data-ledger">7. The Data Ledger</h3>
+<p><em>Below the workspace</em></p>
+<p>Every value you add is one row: region, variable, value, entry mode, source file and timestamps.</p>
 <ul>
-<li><strong>Review:</strong> Check that the Region Name and Value match what you intended.</li>
-<li><strong>Delete:</strong> If you made a mistake, click the row(s) to highlight them, then click the red <strong>Delete Selected</strong> button.</li>
-<li><strong>Download CSV:</strong> When finished, click this to export your clean dataset for analysis.</li>
+<li><strong>Review:</strong> Check that the region name and value match what you intended.</li>
+<li><strong>Delete:</strong> Select rows and click <strong>Delete Selected</strong>.</li>
+<li><strong>Download CSV:</strong> Export the ledger for analysis. Values are stored as text so that counts, categories and notes can share one column; convert the count columns to numbers when you reshape the data.</li>
 </ul>
-<p><img src="tutorial_image_4.png" class="img-fluid" style="width:100.0%"> <em>Figure 4: The Ledger - The final structured output ready for analysis.</em></p>
+<p><img src="tutorial_image_4.png" class="img-fluid" style="width:100.0%"> <em>Figure 4: The ledger, one row per region per variable.</em></p>
 </section>
 </section>
 

@@ -41,8 +41,11 @@ Manifest notes, recorded rather than corrected by renaming:
 - **Rows without an Admin 1 polygon.** The 2025 week 52 table has 38 rows
   including "Jos". Such rows need an operator decision, either to skip or to
   attribute to a state, and the decision belongs in the project notes.
-- **Empty cells denote zero.** The app's "Blank numeric fields record as 0"
-  option in the schema panel handles this.
+- **Only regions with something reported are entered.** A state whose
+  whole current-week row is empty is not entered; the analysis fills zero
+  for states the table covered (decision record 0012). A state with at
+  least one non-empty cell is entered in full, and its empty cells are
+  zeros, handled by the app's "Blank numeric fields record as 0" option.
 - **A missing column is not zero.** The 2020 week 1 to 6 tables list
   confirmed cases only, while Table 1 on page 1 gives national suspected,
   probable and death totals (week 1: 18 confirmed, 2 deaths). Where a

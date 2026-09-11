@@ -325,6 +325,7 @@ schema_server <- function(id, restore = NULL) {
                             value = if (is.null(r$schema_text)) "" else r$schema_text)
         updateTextAreaInput(session, "rules_text",
                             value = if (is.null(r$rules_text)) "" else r$rules_text)
+        if (!is.null(r$blank_zero)) updateCheckboxInput(session, "blank_zero", value = isTRUE(r$blank_zero))
         showNotification("Schema restored from project file.", type = "message")
       })
     }

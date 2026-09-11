@@ -20,6 +20,7 @@ Status values: **accepted**, **superseded by NNNN**, **proposed**.
 | [0009](0009-versioned-project-file-with-legacy-fallback.md) | Project file is a versioned list; bare data frames load as legacy | accepted |
 | [0010](0010-rules-parsed-never-evaluated.md) | Consistency rules are parsed structurally, never evaluated | accepted |
 | [0011](0011-the-operator-reads-the-source.md) | The operator reads the source; no AI in the extraction path | accepted |
+| [0012](0012-record-only-what-the-source-shows.md) | Record only regions the source reports; absence is an analysis step | accepted |
 
 Records 0001 to 0004, 0009 and 0010 document decisions made before this
 folder existed; their dates are when the record was written.

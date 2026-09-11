@@ -27,7 +27,7 @@
 sidecar_controls_ui <- function(id) {
   ns <- NS(id)
   tagList(
-    fileInput(ns("img_file"), "Upload reference (image or PDF)",
+    fileInput(ns("img_file"), "Upload source document (image or PDF)",
               accept = c("image/png", "image/jpeg", "application/pdf", ".pdf"),
               placeholder = "No file"),
 
@@ -158,7 +158,7 @@ sidecar_server <- function(id) {
 
     observeEvent(input$toggle_clock, {
       if (is.na(image_meta()$loaded_at)) {
-        showNotification("Load a reference file first; the clock starts then.", type = "message")
+        showNotification("Load a source document first; the clock starts then.", type = "message")
         return()
       }
       if (is.na(clock$paused_at)) {
@@ -186,7 +186,7 @@ sidecar_server <- function(id) {
       )
 
       if (is.null(input$img_file)) {
-        return(div(style = container_style, h5(class = "text-muted", "Upload a reference image or PDF in the sidebar.")))
+        return(div(style = container_style, h5(class = "text-muted", "Upload the source document (image or PDF) in the sidebar.")))
       }
 
       if (is_pdf()) {

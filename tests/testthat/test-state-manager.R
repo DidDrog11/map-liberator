@@ -142,3 +142,19 @@ test_that("a corrupt file surfaces an error instead of crashing the session", {
     expect_equal(output$status_msg, "")
   })
 })
+
+test_that("project name and blank-as-zero travel with the file and default when absent", {
+  st <- read_project_state(build_project_state(sample_ledger(), SCHEMA_TXT, RULES_TXT,
+                                               project_name = "lassa_2020", blank_zero = TRUE))
+  expect_equal(st$project_name, "lassa_2020")
+  expect_true(st$blank_zero)
+  expect_equal(st$version, 3L)
+
+  # A v2 file (no such fields) reads with defaults rather than failing.
+  v2 <- list(format = PROJECT_FORMAT, version = 2L, ledger = sample_ledger(),
+             schema_text = SCHEMA_TXT, rules_text = RULES_TXT)
+  st2 <- read_project_state(v2)
+  expect_equal(st2$project_name, "")
+  expect_false(st2$blank_zero)
+  expect_false(st2$legacy)
+})

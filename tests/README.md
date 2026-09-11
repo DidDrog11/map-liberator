@@ -172,6 +172,10 @@ The tabular alternative to the map.
 - [ ] **a legacy file yields a NULL schema so current declarations
   survive.** Loading an old file fills the ledger but does not blank the
   schema the operator has typed.
+- [ ] **project name and blank-as-zero travel with the file and default
+  when absent.** A saved project restores its name and its blank-as-zero
+  setting; a file from before those fields existed loads with an empty
+  name and the option off.
 
 ### Plumbing
 

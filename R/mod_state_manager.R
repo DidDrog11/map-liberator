@@ -21,40 +21,50 @@
 # ------------------------------------------------------------------------------
 
 PROJECT_FORMAT  <- "map_liberator_project"
-PROJECT_VERSION <- 2L
+PROJECT_VERSION <- 3L
 
 # --- FORMAT HELPERS (pure; unit-tested independently of Shiny) ---------------
 
-# build_project_state(ledger, schema_text, rules_text)
-#   Assemble the object written to disk.
-build_project_state <- function(ledger, schema_text = "", rules_text = "") {
+# build_project_state(ledger, schema_text, rules_text, project_name, blank_zero)
+#   Assemble the object written to disk. v3 adds the project name and the
+#   blank-as-zero setting, so a resumed extraction carries its conventions.
+build_project_state <- function(ledger, schema_text = "", rules_text = "",
+                                project_name = "", blank_zero = FALSE) {
   list(
-    format      = PROJECT_FORMAT,
-    version     = PROJECT_VERSION,
-    saved_at    = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
-    ledger      = if (is.null(ledger)) data.frame() else as.data.frame(ledger),
-    schema_text = if (is.null(schema_text)) "" else as.character(schema_text)[1],
-    rules_text  = if (is.null(rules_text))  "" else as.character(rules_text)[1]
+    format       = PROJECT_FORMAT,
+    version      = PROJECT_VERSION,
+    saved_at     = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+    ledger       = if (is.null(ledger)) data.frame() else as.data.frame(ledger),
+    schema_text  = if (is.null(schema_text)) "" else as.character(schema_text)[1],
+    rules_text   = if (is.null(rules_text))  "" else as.character(rules_text)[1],
+    project_name = if (is.null(project_name)) "" else as.character(project_name)[1],
+    blank_zero   = isTRUE(blank_zero)
   )
 }
 
 # read_project_state(obj)
-#   Normalise anything readRDS returns into the v2 shape.
-#   Returns list(ledger, schema_text, rules_text, version, legacy) or throws.
+#   Normalise anything readRDS returns into the current shape. Fields added
+#   in later versions default when absent, so v2 files read as v3 with an
+#   empty project name and blank-as-zero off.
+#   Returns list(ledger, schema_text, rules_text, project_name, blank_zero,
+#   version, legacy) or throws.
 read_project_state <- function(obj) {
   # v1: the file is just the ledger.
   if (is.data.frame(obj)) {
     return(list(ledger = obj, schema_text = "", rules_text = "",
+                project_name = "", blank_zero = FALSE,
                 version = 1L, legacy = TRUE))
   }
 
   if (is.list(obj) && !is.null(obj$ledger) && is.data.frame(obj$ledger)) {
     return(list(
-      ledger      = obj$ledger,
-      schema_text = if (is.null(obj$schema_text)) "" else obj$schema_text,
-      rules_text  = if (is.null(obj$rules_text))  "" else obj$rules_text,
-      version     = if (is.null(obj$version)) NA_integer_ else as.integer(obj$version),
-      legacy      = FALSE
+      ledger       = obj$ledger,
+      schema_text  = if (is.null(obj$schema_text)) "" else obj$schema_text,
+      rules_text   = if (is.null(obj$rules_text))  "" else obj$rules_text,
+      project_name = if (is.null(obj$project_name)) "" else obj$project_name,
+      blank_zero   = isTRUE(obj$blank_zero),
+      version      = if (is.null(obj$version)) NA_integer_ else as.integer(obj$version),
+      legacy       = FALSE
     ))
   }
 
@@ -86,7 +96,8 @@ state_manager_ui <- function(id) {
 
 # state_manager_server(id, data_to_save, schema_to_save = NULL)
 #   data_to_save   reactive returning the ledger data.frame
-#   schema_to_save optional reactive returning list(schema_text, rules_text)
+#   schema_to_save optional reactive returning list(schema_text, rules_text,
+#                  project_name, blank_zero)
 #
 # Returns list(ledger = reactive, schema = reactive). `schema` yields NULL when
 # the loaded file carried none, so consumers can leave their inputs untouched.
@@ -102,9 +113,11 @@ state_manager_server <- function(id, data_to_save, schema_to_save = NULL) {
         sch <- if (is.function(schema_to_save)) schema_to_save() else NULL
         saveRDS(
           build_project_state(
-            ledger      = data_to_save(),
-            schema_text = if (is.null(sch)) "" else sch$schema_text,
-            rules_text  = if (is.null(sch)) "" else sch$rules_text
+            ledger       = data_to_save(),
+            schema_text  = if (is.null(sch)) "" else sch$schema_text,
+            rules_text   = if (is.null(sch)) "" else sch$rules_text,
+            project_name = if (is.null(sch)) "" else sch$project_name,
+            blank_zero   = if (is.null(sch)) FALSE else sch$blank_zero
           ),
           file
         )
@@ -134,8 +147,9 @@ state_manager_server <- function(id, data_to_save, schema_to_save = NULL) {
       if (is.null(st)) return(NULL)
       # Nothing to restore for a legacy file; returning NULL leaves the
       # operator's current schema in place rather than blanking it.
-      if (!nzchar(st$schema_text) && !nzchar(st$rules_text)) return(NULL)
-      list(schema_text = st$schema_text, rules_text = st$rules_text)
+      if (st$legacy) return(NULL)
+      list(schema_text  = st$schema_text, rules_text = st$rules_text,
+           project_name = st$project_name, blank_zero = st$blank_zero)
     })
 
     output$status_msg <- renderText({

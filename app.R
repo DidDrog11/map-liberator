@@ -60,8 +60,8 @@ ui <- fluidPage(
       hr(),
       controls_ui("ctrl"), 
       hr(),
-      h4("Reference Map"),
-      actionButton("toggle_ref", "Show/Hide Image", icon=icon("eye"), class="btn-info btn-sm", width="100%"),
+      h4("Source Document"),
+      actionButton("toggle_ref", "Show/Hide Source", icon=icon("eye"), class="btn-info btn-sm", width="100%"),
       br(), br(),
       sidecar_controls_ui("sidecar") 
     ),
@@ -90,7 +90,7 @@ ui <- fluidPage(
                                                 tags$p(tags$b("Map:"), " click polygons. Best when the source is itself a map."),
                                                 tags$p(class = "mb-0", tags$b("Region list:"), " click a name, with a search box. ",
                                                        "Best when the source is a table. The Entered column shows how many ",
-                                                       "values each region already has for the current reference image."))
+                                                       "values each region already has for the current source document."))
                                  ),
 
                                  # Region list (hidden until chosen)
@@ -161,8 +161,10 @@ server <- function(input, output, session) {
     "state",
     data_to_save   = bridge_data,
     schema_to_save = reactive(list(
-      schema_text = controls_out$schema_text(),
-      rules_text  = controls_out$rules_text()
+      schema_text  = controls_out$schema_text(),
+      rules_text   = controls_out$rules_text(),
+      project_name = controls_out$metadata()$project,
+      blank_zero   = controls_out$blank_zero()
     ))
   )
   

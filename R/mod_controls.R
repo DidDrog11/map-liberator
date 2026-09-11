@@ -143,6 +143,16 @@ controls_server <- function(id, restore_schema = NULL) {
     # Schema module is nested inside the control panel: the declared variable
     # set is part of the extraction setup, alongside country and admin level.
     schema_out <- schema_server("schema", restore = restore_schema)
+
+    # The project name travels with the file too, so a resumed extraction
+    # keeps stamping the same name on new rows.
+    if (is.function(restore_schema)) {
+      observeEvent(restore_schema(), {
+        r <- restore_schema()
+        req(!is.null(r), !is.null(r$project_name), nzchar(r$project_name))
+        updateTextInput(session, "project_name", value = r$project_name)
+      })
+    }
     
     # --- DYNAMIC DATA INPUT UI ---
     output$var_value_ui <- renderUI({
