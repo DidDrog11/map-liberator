@@ -36,6 +36,10 @@ workbench_ui <- function(id) {
     div(style = "display: flex; gap: 10px; margin-bottom: 10px; align-items: center;",
         downloadButton(ns("download_csv"), "Download CSV", class = "btn-secondary btn-sm"),
         actionButton(ns("delete_rows"), "Delete Selected", icon = icon("trash"), class = "btn-danger btn-sm"),
+        actionButton(ns("apply_meta"), "Apply Metadata", icon = icon("tags"), class = "btn-outline-secondary btn-sm",
+                     title = paste("Stamp the current project name, source, dates and epi week onto the",
+                                   "selected rows, or onto every row for the current source document",
+                                   "if none are selected.")),
         div(style = "margin-left: auto;", textOutput(ns("quality_msg")))
     ),
     DT::DTOutput(ns("ledger_table"))
@@ -333,6 +337,37 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
     observe({
       req(loaded_state())
       if (nrow(loaded_state()) > 0) project_data(loaded_state())
+    })
+
+    # --- 4b. APPLY METADATA -----------------------------------------------
+    # Metadata is stamped at commit, so rows entered before the panel was
+    # filled in carry blanks. This re-stamps them from the panel: selected
+    # rows if any, otherwise every row for the current source document.
+    observeEvent(input$apply_meta, {
+      d <- project_data()
+      if (nrow(d) == 0) return()
+
+      sel <- input$ledger_table_rows_selected
+      idx <- if (length(sel) > 0) sel else {
+        img <- current_image()$file
+        if (is.na(img)) integer(0) else which(!is.na(d$Image_File) & d$Image_File == img)
+      }
+      if (length(idx) == 0) {
+        showNotification("Select rows, or load the source document whose rows should be updated.",
+                         type = "warning")
+        return()
+      }
+
+      meta <- controls_output$metadata()
+      d$Project[idx]  <- meta$project
+      d$Source[idx]   <- meta$source
+      d$Date_Ref[idx] <- paste(meta$year, meta$month, meta$day, sep = "-")
+      if (!"Date_End" %in% names(d)) d$Date_End <- NA_character_
+      d$Date_End[idx] <- period_end(meta)
+      d$Epi_Week[idx] <- if (is.null(meta$week) || is.na(meta$week)) NA_integer_ else as.integer(meta$week)
+      project_data(d)
+
+      showNotification(paste("Metadata applied to", length(idx), "rows."), type = "message")
     })
 
     # --- 5. DELETE --------------------------------------------------------

@@ -110,6 +110,11 @@ validation gate.
   of rows with the new values. A different region is a fresh entry.
 - [ ] **a period end is recorded when given and NA for a single-date
   report.**
+- [ ] **Apply Metadata re-stamps the current document's rows, or the
+  selected rows.** Rows committed before the metadata panel was filled in
+  can be corrected in bulk: with no selection, every row for the current
+  source document takes the panel's project, source, dates and epi week;
+  with a selection, only those rows do.
 
 ### Plumbing
 

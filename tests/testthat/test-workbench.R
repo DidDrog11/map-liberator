@@ -330,3 +330,35 @@ test_that("a period end is recorded when given and NA for a single-date report",
     expect_equal(session$returned()$Date_End, "2025-12-31")
   })
 })
+
+test_that("Apply Metadata re-stamps the current document's rows, or the selected rows", {
+  add  <- reactiveVal(0)
+  meta <- reactiveVal(test_metadata(source = "", week = NA))
+  ctrl <- mock_controls("single", add_trigger = reactive(add()))
+  ctrl$metadata <- meta
+
+  shiny::testServer(workbench_server, args = list(
+    map_source      = list(selected = reactive(c("NGA.28_1", "NGA.12_1")), click = reactive(NULL)),
+    controls_output = ctrl,
+    loaded_state    = reactive(NULL),
+    sidecar_source  = mock_sidecar("w07.pdf")
+  ), {
+    add(1); session$flushReact()
+    expect_equal(session$returned()$Source, c("", ""))
+    expect_true(all(is.na(session$returned()$Epi_Week)))
+
+    # Fill the panel in afterwards and apply to the document's rows.
+    meta(test_metadata(source = "sitrep_w07", week = 7)); session$flushReact()
+    session$setInputs(apply_meta = 1)
+    d <- session$returned()
+    expect_equal(d$Source, c("sitrep_w07", "sitrep_w07"))
+    expect_equal(d$Epi_Week, c(7L, 7L))
+
+    # With a selection, only the selected row changes.
+    meta(test_metadata(source = "sitrep_w08", week = 8)); session$flushReact()
+    session$setInputs(ledger_table_rows_selected = 2L)
+    session$setInputs(apply_meta = 2)
+    d <- session$returned()
+    expect_equal(d$Source, c("sitrep_w07", "sitrep_w08"))
+  })
+})
