@@ -116,7 +116,13 @@ fetch_ncdc_listing <- function(url = LISTING_URL) {
 
 # --- DOWNLOAD -----------------------------------------------------------------
 
-download_ncdc_sitreps <- function(dir = SITREP_DIR, pause = 0.5, quiet = FALSE) {
+# download_ncdc_sitreps(dir, years, pause, quiet)
+#   years  optional integer vector; download only reports from these report
+#          years. The manifest still describes the whole listing, so coverage
+#          is never misreported - only the fetching is narrowed. Extraction
+#          runs a year at a time, and pulling 480 PDFs to work on 50 is rude
+#          to the source and slow.
+download_ncdc_sitreps <- function(dir = SITREP_DIR, years = NULL, pause = 0.5, quiet = FALSE) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   manifest <- parse_ncdc_listing(fetch_ncdc_listing())
   manifest$path       <- file.path(dir, manifest$file)
@@ -125,7 +131,11 @@ download_ncdc_sitreps <- function(dir = SITREP_DIR, pause = 0.5, quiet = FALSE) 
   manifest$error      <- NA_character_
 
   todo <- which(!manifest$downloaded)
-  if (!quiet) message(nrow(manifest), " reports listed; ", length(todo), " to download.")
+  if (!is.null(years)) {
+    todo <- todo[!is.na(manifest$report_year[todo]) & manifest$report_year[todo] %in% years]
+  }
+  if (!quiet) message(nrow(manifest), " reports listed; ", length(todo), " to download",
+                      if (!is.null(years)) paste0(" (years: ", paste(years, collapse = ", "), ")") else "", ".")
 
   for (i in todo) {
     ok <- tryCatch({
@@ -142,13 +152,34 @@ download_ncdc_sitreps <- function(dir = SITREP_DIR, pause = 0.5, quiet = FALSE) 
     } else if (file.exists(manifest$path[i])) {
       unlink(manifest$path[i])  # never leave a partial file to be "resumed"
     }
-    if (!quiet && (match(i, todo) %% 25 == 0 || i == max(todo)))
-      message(sprintf("  %d / %d", sum(manifest$downloaded), nrow(manifest)))
+    if (!quiet && (match(i, todo) %% 10 == 0 || i == max(todo)))
+      message(sprintf("  %d / %d of this batch", match(i, todo), length(todo)))
     Sys.sleep(pause)
   }
 
+  manifest <- .merge_manifest(manifest)
   write.csv(manifest[, setdiff(names(manifest), "path")], MANIFEST, row.names = FALSE)
   invisible(manifest)
+}
+
+# Carry forward columns the existing manifest has that a fresh listing parse
+# does not: the verification and rendering results (pages, epi_week_pdf,
+# page_table3, md5, png, ...). Those are produced by reading the PDFs, which on
+# a machine holding only part of the archive cannot be redone for the rest, so
+# overwriting the file from the listing silently destroyed them for every
+# report not present locally. Rows are matched on `hash`, the listing's own
+# stable identifier.
+.merge_manifest <- function(fresh) {
+  if (!file.exists(MANIFEST)) return(fresh)
+  old <- tryCatch(read.csv(MANIFEST, stringsAsFactors = FALSE), error = function(e) NULL)
+  if (is.null(old) || !"hash" %in% names(old)) return(fresh)
+
+  carry <- setdiff(names(old), c(names(fresh), "path"))
+  if (length(carry) == 0) return(fresh)
+
+  idx <- match(fresh$hash, old$hash)
+  for (cn in carry) fresh[[cn]] <- old[[cn]][idx]
+  fresh
 }
 
 # --- VERIFY -------------------------------------------------------------------
@@ -180,9 +211,19 @@ verify_ncdc_sitreps <- function(manifest, dir = SITREP_DIR) {
     manifest$has_text[i] <- nchar(trimws(p1)) > 50
     # The week must be followed by a non-digit: broken text layers run
     # "Epi Week: 2 2022" together as "22022", which must yield NA, not 22.
-    wk <- regmatches(p1, regexpr("Epi\\s*Week:?\\s*(\\d{1,2})(?![\\d])", p1, perl = TRUE))
+    # Case- and hyphen-insensitive because the 2017-2019 layout heads the page
+    # "EPI-WEEK: 01" rather than "Epi Week: 1". Without this those reports
+    # verify as NA, and the one-week offset in their file names (see
+    # sitrep_formats.md) goes unchecked on exactly the reports that have it.
+    wk <- regmatches(p1, regexpr("(?i)Epi[\\s-]*Week:?\\s*(\\d{1,2})(?![\\d])", p1, perl = TRUE))
     yr <- regmatches(p1, regexpr("\\b20[12]\\d\\b", p1, perl = TRUE))
     if (length(wk)) manifest$epi_week_pdf[i] <- as.integer(gsub("\\D", "", wk))
+    # The 2017-2019 Highlights open "In the reporting week N", the body's own
+    # statement of the period. Prefer it over the header, which can carry
+    # residue from the template it was edited from (2019 w42 reads
+    # "EPI-WEEK: 41 42" in its header and "reporting week 42" in its body).
+    body <- regmatches(p1, regexpr("(?i)In the reporting\\s+week\\s+(\\d{1,2})(?![\\d])", p1, perl = TRUE))
+    if (length(body)) manifest$epi_week_pdf[i] <- as.integer(gsub("\\D", "", body))
     if (length(yr)) manifest$year_pdf[i]     <- as.integer(yr)
     # Caption lines start with "Table 3"; the page-1 highlights also say
     # "(Table 3)" in running text, which must not count.

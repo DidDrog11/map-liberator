@@ -133,6 +133,94 @@ and the late-report variables (`confirmed_late`, `deaths_late`) follow the
 same logic as any other enumerated variable. The mixed case should be rare;
 list its occurrences and check why they arose before trusting them.
 
+**Rows with no region.** A document that was reviewed and reports nothing for
+any region is recorded with `Region_ID` NA and `Entry_Mode` `nil`. Read such a
+row as a statement about the document, not about a state: a value of 0 means
+the variable was enumerated and no region reached it, so the grid fills 0 for
+every state; NA means the document gives no state breakdown for that variable,
+so the grid stays NA. This is what separates a week that was read and found
+empty from one that was never extracted, which the ledger otherwise cannot
+distinguish. Sum these rows into national totals as normal — they carry the
+national figure — but exclude them when counting how many states reported.
+
+## OPEN DECISION: unattributed deaths in 2017-2019 (settle at reconciliation)
+
+Not yet decided. It affects six rows in 2018 and nothing later, because the
+2020-onward tables attribute deaths per state explicitly. Decide it when going
+through the reconciliation, then record the answer here and apply it through
+`analysis/correct_2018_project.R` so the change is logged.
+
+**The question.** Some weeks give a deaths figure with no state attached:
+
+> "In the reporting Week 33 ... three new confirmed cases were reported from
+> Edo state **with two new deaths**"
+
+Only Edo reported cases, so reading the deaths as Edo's is natural, and that is
+how they were entered. The protocol as written says NA, on the grounds that the
+source did not attribute them.
+
+**Evidence for treating it as an inference rather than an observation.** Deaths
+in these reports are deaths *in confirmed cases* - confirmed at any time, not
+necessarily that week - so they need not fall in a state reporting new cases.
+Across 2018-2019 there are 73 weeks where deaths ARE attributed by state, and in
+three of them a death falls in a state with no confirmed cases that week:
+
+| week | death in a state with zero cases |
+|---|---|
+| 2018 w12 (page) | Ebonyi |
+| 2018 w14 (page) | FCT |
+| 2019 w05 (page) | Enugu |
+
+Note the limit of that evidence: of those 73 weeks, **none** is a single-state
+week, so there is no direct evidence about the exact shape in question.
+
+**Options.**
+
+1. Keep them against the single reporting state. Simple, probably right most of
+   the time, but records an inference as though the source stated it.
+2. NA for every state. Follows the current protocol, but discards the national
+   figure entirely - the report says two deaths happened and the ledger ends up
+   with no record of them.
+3. Record the national figure as a document-level row (`Region_ID` NA, the same
+   mechanism as a nil return) and no state-level deaths row for that week. Keeps
+   the number, attributes nothing, and does not double-count: the reconciliation
+   sums one row per variable per document either way. Attribution then becomes
+   an analysis step, as with the grid-completion rule above.
+
+**The six rows, which are three different cases.**
+
+- 2018 page weeks 33, 35, 42 - single state, deaths unattributed.
+- 2018 page week 46 - "Edo (1) and Ondo (2) with one new death", recorded as
+  Ondo. Two candidates, one death; a coin flip either way.
+- 2018 page weeks 22, 26 - no deaths clause at all, recorded as 0. A separate
+  question, and 0 looks right: these reports state deaths whenever they occur,
+  so silence reads as none.
+
+If option 3 is chosen, `check_ledger_against_highlights.R` should also verify a
+document-level figure against the sentence's stated total; it currently ignores
+region-less rows and would pass them silently.
+
+## Charts drawn over Table 3
+
+2022 week 2 draws the age/sex pyramid and the cases-by-state bar chart on top of
+Table 3. The table is a raster underneath them, so zooming or cropping cannot
+recover it. `analysis/extract_pdf_image.R` pulls the table's own image out:
+
+```r
+source("analysis/extract_pdf_image.R")
+pdf_page_images(path, page = 4)            # list the images, largest first
+extract_pdf_image(path, page = 4, out = "data/sitreps/png/<name>_table3.png")
+```
+
+The extracted PNG is convenience output in the sense of decision record 0007:
+load it in the sidecar to read the numbers, but the ledger's `Image_File` should
+still name the report, not the derivative.
+
+Checked across all 47 usable 2022 reports by looking for a figure caption
+sharing the Table 3 page: **week 2 is the only one**. The same check is worth
+re-running per year, since the object-level scan cannot see inside the compressed
+object streams that the PDF 1.7 reports use.
+
 ## Timing protocol
 
 The clock starts when the page image is uploaded. Pause it (sidebar button)

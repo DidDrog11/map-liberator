@@ -125,6 +125,62 @@ validation gate.
 - **a loaded ledger replaces the session ledger.** Loading a project swaps in
   its rows.
 
+## Map (`test-map-engine.R`)
+
+Selection state on the map, and which document a selection belongs to.
+
+### Domain rules
+
+- [ ] **loading a new source document clears the map selection.** A
+  selection made against one report must not survive into the next: in
+  batch mode it would be committed under the new report's metadata, and
+  because every value is individually valid no later check could catch the
+  wrong attribution.
+- [ ] **pausing the clock does not clear the selection.** The sidecar's
+  reactive changes on pause as well as on load, so the file name is
+  compared against the last one seen; otherwise pausing to read the source
+  would wipe a batch mid-entry.
+- [ ] **a selection made before any document is loaded survives the first
+  load.** There is no previous document for it to belong to.
+- [ ] **deselecting repaints a region in the style it was drawn in**, so a
+  region that has been clicked and unclicked is indistinguishable from one
+  never touched.
+
+### Plumbing
+
+- **clicking selects, clicking again deselects**, and selections accumulate.
+- **a click on an id absent from the layer is ignored.**
+- **the Reset control clears the selection.**
+- **the module works with no sidecar attached** (`image` is optional).
+
+## Nothing reported (`test-nil-return.R`)
+
+Recording that a document was reviewed and reports nothing for any region.
+
+### Domain rules
+
+- [ ] **a nil return records every declared variable against the document,
+  with no region.** `Region_ID` is NA and `Entry_Mode` is `nil`. Attaching
+  the zero to an arbitrary region records a true value, but leaves the fact
+  that it stands for the whole country as an unwritten convention.
+- [ ] **a variable the document does not break down is recorded as NA**, so
+  a 2018 nil week is zero confirmed and zero deaths with suspected unknown
+  at state level.
+- [ ] **a nil return carries the same provenance as any other row** (source
+  file, period, epi week), which is what makes it evidence the document was
+  processed rather than skipped.
+- [ ] **a nil return is refused until a source document is loaded**, since
+  there would be nothing to attribute it to.
+- [ ] **a nil return does not disturb rows already entered for the same
+  document**, and re-submitting one replaces it rather than appending.
+- [ ] **in paint mode the nil return records the batch variable**, not the
+  hidden schema the operator cannot see in that mode.
+
+### Plumbing
+
+- **a nil return is validated like any other commit**; a bad value is
+  refused and counted.
+
 ## Region list (`test-region-list.R`)
 
 The tabular alternative to the map.
@@ -146,6 +202,8 @@ The tabular alternative to the map.
   selection**, so the same row can be clicked again.
 - **a multi-select in batch mode is the batch and emits no click.**
 - **an empty layer renders a placeholder rather than erroring.**
+- **loading a new source document clears a batch selection**, matching the
+  map; pausing the clock does not.
 
 ## Sidecar, the reference viewer (`test-sidecar.R`)
 

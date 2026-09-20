@@ -128,7 +128,25 @@ controls_ui <- function(id) {
           condition = sprintf("input['%s'] == 'form'", ns("entry_mode")),
           div(class = "text-muted", style = "font-size: 12px; text-align: center; font-style: italic;",
               "Click a region on the map to enter its values.")
-        )
+        ),
+
+        hr(),
+
+        # A report that enumerates a variable and reports nothing for any
+        # region is a real observation, but it has no region to attach to.
+        # Without this the operator has to nominate an arbitrary region to
+        # carry the zero, which records a true value but leaves "the whole
+        # country was nil" as an unwritten convention.
+        actionButton(ns("nil_return"), "Nothing reported in this document",
+                     class = "btn-outline-secondary btn-sm", width = "100%",
+                     icon = icon("circle-minus")),
+        div(class = "text-muted", style = "font-size: 11px; margin-top: 4px;",
+            hint_label("What this records",
+                       title = "Nothing reported",
+                       tags$p("Use when the document was reviewed and reports no cases for any region."),
+                       tags$p("It records the values against the document rather than a region, so the ledger shows the report was processed and its national figure was zero."),
+                       tags$p(class = "mb-0", "Set a variable to ", tags$code("NA"),
+                              " if the document gives no breakdown for it at all, as 2018 does for suspected cases.")))
       )
     )
   )
@@ -457,6 +475,7 @@ controls_server <- function(id, restore_schema = NULL, restore_metadata = NULL) 
         )
       }),
       add_trigger  = reactive(input$add_to_project),
+      nil_trigger  = reactive(input$nil_return),
       clear_trigger = reactive(input$clear_map),
 
       # Form-mode contract consumed by the workbench.

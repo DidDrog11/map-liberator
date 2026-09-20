@@ -17,13 +17,50 @@ map_engine_ui <- function(id, height = "100%") {
 }
 
 # 2. SERVER
-map_engine_server <- function(id, controls_output) {
+# `image` is the sidecar's reactive. The selection is cleared when the source
+# document changes: a selection belongs to the document it was made against,
+# and in batch mode a stale one would be committed under the new document's
+# metadata with every value individually valid, so nothing downstream could
+# catch it.
+map_engine_server <- function(id, controls_output, image = NULL) {
   moduleServer(id, function(input, output, session) {
-    
+
     selected_ids <- reactiveVal(character(0))
     last_render_time <- reactiveVal(NA)
     data_drawn <- reactiveVal(FALSE)
-    
+    last_source_file <- reactiveVal(NA_character_)
+
+    # The weight the target layer was drawn at, so a deselected polygon returns
+    # to exactly the style it had rather than a hardcoded approximation.
+    target_weight_for <- function(target) {
+      n_poly <- nrow(target)
+      if (n_poly > 1000) 0.5 else if (n_poly > 500) 0.8 else 1.2
+    }
+
+    # Repaint `ids` unselected and drop them from the selection. Clearing the
+    # reactiveVal alone would leave the polygons red while the app believed
+    # nothing was selected, which is a worse state than either.
+    deselect <- function(ids) {
+      target <- controls_output$geom_data()
+      if (!is.null(target) && length(ids) > 0) {
+        rows <- target[target$layerId %in% ids, ]
+        if (nrow(rows) > 0) {
+          leafletProxy("map") |> addPolygons(
+            data = rows,
+            layerId = ~layerId,
+            fillColor = "white", fillOpacity = 0.05,
+            color = "#2c3e50", weight = target_weight_for(target), opacity = 0.8,
+            label = ~Tooltip,
+            options = pathOptions(pane = "geom_pane"),
+            highlightOptions = highlightOptions(color = "#e74c3c", weight = 3,
+                                                bringToFront = TRUE, fillOpacity = 0.2),
+            group = "Target Layer"
+          )
+        }
+      }
+      selected_ids(setdiff(selected_ids(), ids))
+    }
+
     # --- HELPER: DRAWING LOGIC (Visual Hierarchy) ---
     draw_geometry <- function(map_obj, target, context) {
       
@@ -179,7 +216,10 @@ map_engine_server <- function(id, controls_output) {
       curr <- selected_ids()
       if (click$id %in% curr) {
         selected_ids(setdiff(curr, click$id))
-        col <- "#2c3e50"; fill <- "white"; op <- 0.05; w <- 0.8 # Reset to thin
+        # Return to the weight this layer was actually drawn at; a fixed 0.8
+        # left deselected polygons thinner than their untouched neighbours at
+        # the admin levels where the drawn weight is 1.2.
+        col <- "#2c3e50"; fill <- "white"; op <- 0.05; w <- target_weight_for(target)
       } else {
         selected_ids(c(curr, click$id))
         col <- "#e74c3c"; fill <- "#e74c3c"; op <- 0.5; w <- 3.0 # Select Thick
@@ -196,7 +236,33 @@ map_engine_server <- function(id, controls_output) {
         )
     })
     
-    observeEvent(controls_output$clear_trigger(), { selected_ids(character(0)) })
+    observeEvent(controls_output$clear_trigger(), { deselect(selected_ids()) })
+
+    # A new source document invalidates any selection made against the previous
+    # one. The sidecar's reactive also changes when the clock is paused, so the
+    # file name is compared against the last one seen rather than being trusted
+    # to have changed; otherwise pausing would wipe a batch mid-entry.
+    if (is.function(image)) {
+      observeEvent(image(), {
+        fn   <- image()$file_name
+        prev <- isolate(last_source_file())
+        if (identical(fn, prev)) return()
+        last_source_file(fn)
+
+        # Nothing to carry over from before the first document was loaded.
+        if (is.na(prev)) return()
+
+        ids <- isolate(selected_ids())
+        if (length(ids) > 0) {
+          deselect(ids)
+          showNotification(
+            sprintf("New source document: cleared %d selected region%s.",
+                    length(ids), if (length(ids) == 1) "" else "s"),
+            type = "message"
+          )
+        }
+      }, ignoreNULL = TRUE)
+    }
     
     # --- D. PERFORMANCE DISPLAY ---
     output$perf_msg <- renderText({

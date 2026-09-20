@@ -144,6 +144,22 @@ region_list_server <- function(id, geom_data, entry_mode, ledger = NULL, image =
       }
     }, ignoreNULL = TRUE)
 
+    # A batch selection belongs to the document it was made against, so a new
+    # source document clears it, matching the map. The sidecar's reactive also
+    # changes when the clock is paused, so the file name is compared against
+    # the last one seen rather than being trusted to have changed.
+    last_source_file <- reactiveVal(NA_character_)
+    if (is.function(image)) {
+      observeEvent(image(), {
+        fn   <- image()$file_name
+        prev <- isolate(last_source_file())
+        if (identical(fn, prev)) return()
+        last_source_file(fn)
+        if (is.na(prev)) return()
+        if (length(isolate(input$tbl_rows_selected)) > 0) DT::selectRows(proxy, NULL)
+      }, ignoreNULL = TRUE)
+    }
+
     selected <- reactive({
       r <- regions()
       if (is.null(r) || identical(entry_mode(), "form")) return(character(0))

@@ -1,0 +1,52 @@
+"file","week_page","note","confirmed_source_total","confirmed_source_states","confirmed_ledger_states","confirmed_stratified","confirmed_ok","confirmed_bad","deaths_source_total","deaths_source_states","deaths_ledger_states","deaths_stratified","deaths_ok","deaths_bad"
+"lassa_sitrep_2018_w02_20180107.pdf",1,"no deaths clause",1,1,1,TRUE,1,0,NA,0,1,FALSE,1,0
+"lassa_sitrep_2018_w03_20180114.pdf",2,"",17,4,6,TRUE,4,0,3,1,6,TRUE,1,0
+"lassa_sitrep_2018_w04_20180121.pdf",3,"",34,8,8,TRUE,8,0,14,0,8,FALSE,8,0
+"lassa_sitrep_2018_w05_20180128.pdf",4,"",15,5,5,TRUE,5,0,2,0,5,FALSE,5,0
+"lassa_sitrep_2018_w06_20180204.pdf",5,"",17,9,9,TRUE,9,0,9,8,9,TRUE,8,0
+"lassa_sitrep_2018_w07_20180211.pdf",6,"",19,7,7,TRUE,7,0,6,4,7,TRUE,4,0
+"lassa_sitrep_2018_w08_20180218.pdf",7,"",68,7,7,TRUE,7,0,4,2,7,TRUE,2,0
+"lassa_sitrep_2018_w09_20180225.pdf",8,"",54,8,8,TRUE,8,0,10,5,8,TRUE,5,0
+"lassa_sitrep_2018_w10_20180304.pdf",9,"",35,5,5,TRUE,5,0,7,3,5,TRUE,3,0
+"lassa_sitrep_2018_w11_20180311.pdf",10,"",12,8,8,TRUE,8,0,3,3,8,TRUE,3,0
+"lassa_sitrep_2018_w12_20180318.pdf",11,"",9,4,5,TRUE,4,0,3,3,5,TRUE,3,0
+"lassa_sitrep_2018_w13_20180325.pdf",12,"",18,10,10,TRUE,10,0,6,5,10,TRUE,5,0
+"lassa_sitrep_2018_w14_20180401.pdf",13,"",6,5,5,TRUE,5,0,2,2,5,TRUE,1,1
+"lassa_sitrep_2018_w15_20180408.pdf",14,"",8,5,6,TRUE,5,0,3,3,6,TRUE,3,1
+"lassa_sitrep_2018_w16_20180415.pdf",15,"",5,4,4,TRUE,4,0,3,3,4,TRUE,3,0
+"lassa_sitrep_2018_w17_20180422.pdf",16,"",1,1,1,TRUE,1,0,0,0,1,TRUE,0,0
+"lassa_sitrep_2018_w18_20180429.pdf",17,"",4,3,3,TRUE,3,0,1,1,3,TRUE,1,0
+"lassa_sitrep_2018_w19_20180506.pdf",18,"",3,2,2,TRUE,2,0,0,0,2,TRUE,0,0
+"lassa_sitrep_2018_w20_20180513.pdf",19,"",5,3,3,TRUE,3,0,1,1,3,TRUE,1,0
+"lassa_sitrep_2018_w21_20180520.pdf",20,"",3,3,3,TRUE,3,0,1,1,3,TRUE,1,0
+"lassa_sitrep_2018_w22_20180527.pdf",21,"no deaths clause",0,0,0,TRUE,0,0,NA,0,0,FALSE,0,0
+"lassa_sitrep_2018_w23_20180603.pdf",22,"no deaths clause",1,1,1,TRUE,1,0,NA,0,1,FALSE,0,1
+"lassa_sitrep_2018_w24_20180610.pdf",23,"",5,2,2,TRUE,2,0,1,1,2,TRUE,1,0
+"lassa_sitrep_2018_w25_20180617.pdf",24,"",1,1,1,TRUE,1,0,0,0,1,TRUE,0,0
+"lassa_sitrep_2018_w26_20180624.pdf",25,"",6,3,3,TRUE,3,0,2,2,3,TRUE,1,2
+"lassa_sitrep_2018_w27_20180701.pdf",26,"no deaths clause",2,2,2,TRUE,2,0,NA,0,2,FALSE,0,2
+"lassa_sitrep_2018_w28_20180708.pdf",27,"",7,4,4,TRUE,4,0,3,2,4,TRUE,2,0
+"lassa_sitrep_2018_w29_20180715.pdf",28,"",6,2,2,TRUE,2,0,1,1,2,TRUE,1,0
+"lassa_sitrep_2018_w30_20180722.pdf",29,"",6,2,2,TRUE,2,0,3,2,2,TRUE,2,0
+"lassa_sitrep_2018_w31_20180729.pdf",30,"",5,2,2,TRUE,2,0,1,1,2,TRUE,1,0
+"lassa_sitrep_2018_w32_20180805.pdf",31,"",9,3,3,TRUE,3,0,2,2,3,TRUE,2,0
+"lassa_sitrep_2018_w33_20180812.pdf",32,"",4,3,3,TRUE,3,0,1,1,3,TRUE,1,0
+"lassa_sitrep_2018_w34_20180819.pdf",33,"deaths unattributed; single reporting state",3,1,1,TRUE,1,0,2,0,1,FALSE,0,1
+"lassa_sitrep_2018_w35_20180826.pdf",34,"",3,3,3,TRUE,3,0,2,2,3,TRUE,2,0
+"lassa_sitrep_2018_w36_20180902.pdf",35,"deaths unattributed; single reporting state",5,1,1,TRUE,1,0,1,0,1,FALSE,0,1
+"lassa_sitrep_2018_w37_20180909.pdf",36,"",7,2,2,TRUE,2,0,0,0,2,TRUE,0,0
+"lassa_sitrep_2018_w38_20180916.pdf",37,"",2,1,1,TRUE,1,0,0,0,1,TRUE,0,0
+"lassa_sitrep_2018_w39_20180923.pdf",38,"",4,3,3,TRUE,3,0,1,1,3,TRUE,1,0
+"lassa_sitrep_2018_w40_20180930.pdf",39,"",4,2,2,TRUE,2,0,0,0,2,TRUE,0,0
+"lassa_sitrep_2018_w41_20181007.pdf",40,"",9,3,3,TRUE,3,0,1,1,3,TRUE,1,0
+"lassa_sitrep_2018_w42_20181014.pdf",41,"",13,6,6,TRUE,6,0,2,2,6,TRUE,2,0
+"lassa_sitrep_2018_w43_20181021.pdf",42,"deaths unattributed; single reporting state",3,1,1,TRUE,1,0,2,0,1,FALSE,0,1
+"lassa_sitrep_2018_w44_20181028.pdf",43,"",9,3,3,TRUE,3,0,2,2,3,TRUE,2,0
+"lassa_sitrep_2018_w45_20181104.pdf",44,"",5,3,3,TRUE,3,0,2,2,3,TRUE,2,0
+"lassa_sitrep_2018_w46_20181111.pdf",45,"",5,2,2,TRUE,2,0,0,0,2,TRUE,0,0
+"lassa_sitrep_2018_w47_20181118.pdf",46,"",3,2,2,TRUE,2,0,1,0,2,FALSE,0,2
+"lassa_sitrep_2018_w48_20181126.pdf",47,"",6,2,2,TRUE,2,0,0,0,2,TRUE,0,0
+"lassa_sitrep_2018_w49_20181202.pdf",48,"",13,5,5,TRUE,5,0,3,3,5,TRUE,3,0
+"lassa_sitrep_2018_w50_20181210.pdf",50,"",12,6,6,TRUE,6,0,8,4,6,TRUE,3,1
+"lassa_sitrep_2018_w51_20181217.pdf",51,"",14,6,6,TRUE,6,0,7,5,6,TRUE,5,0
+"lassa_sitrep_2018_w52_20181224.pdf",52,"",22,4,4,TRUE,4,0,5,3,4,TRUE,3,0

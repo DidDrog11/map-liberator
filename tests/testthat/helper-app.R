@@ -25,14 +25,21 @@ source(file.path(APP_ROOT, "analysis", "parse_ncdc_benchmark.R"))
 # A minimal stand-in for a loaded GADM layer. Only `layerId` and a NAME_* column
 # are needed: everything downstream reads the attribute table, not the geometry.
 test_geometry <- function() {
-  sf::st_as_sf(
-    data.frame(
-      layerId = c("NGA.28_1", "NGA.12_1", "NGA.6_1"),
-      NAME_1  = c("Ondo", "Edo", "Bauchi"),
-      x = c(5, 6, 10), y = c(7, 6, 10),
-      stringsAsFactors = FALSE
-    ),
-    coords = c("x", "y"), crs = 4326
+  # Polygons, not points: the map engine redraws a clicked region with
+  # addPolygons, which rejects point geometry. Tests that only read the
+  # attribute table are unaffected by the shape.
+  square <- function(x, y) {
+    sf::st_polygon(list(cbind(c(x, x + 1, x + 1, x, x),
+                              c(y, y, y + 1, y + 1, y))))
+  }
+  sf::st_sf(
+    layerId = c("NGA.28_1", "NGA.12_1", "NGA.6_1"),
+    NAME_1  = c("Ondo", "Edo", "Bauchi"),
+    # add_hierarchy_label() supplies this on real layers; the map engine binds
+    # it as the Leaflet label, so the fixture has to carry it too.
+    Tooltip = c("Ondo", "Edo", "Bauchi"),
+    geometry = sf::st_sfc(square(5, 7), square(6, 6), square(10, 10), crs = 4326),
+    stringsAsFactors = FALSE
   )
 }
 
@@ -52,7 +59,8 @@ mock_controls <- function(entry_mode = "single",
                           schema = parse_schema_text("status, binary"),
                           rules = NULL,
                           geometry = test_geometry(),
-                          blank_zero = FALSE) {
+                          blank_zero = FALSE,
+                          nil_trigger = reactive(0)) {
   if (is.null(rules)) rules <- parse_rules_text("", schema)
   list(
     geom_data    = reactive(geometry),
@@ -62,7 +70,31 @@ mock_controls <- function(entry_mode = "single",
     schema       = reactive(schema),
     rules        = reactive(rules),
     schema_valid = reactive(TRUE),
-    blank_zero   = reactive(blank_zero)
+    blank_zero   = reactive(blank_zero),
+    nil_trigger  = nil_trigger,
+    # Needed by mod_map_engine, which redraws on geom_trigger and deselects on
+    # clear_trigger. Static here: tests drive selection through clicks.
+    context_data  = reactive(list()),
+    geom_trigger  = reactive(0),
+    clear_trigger = reactive(0)
+  )
+}
+
+# A sidecar stand-in whose file name can be changed mid-test, to stand for the
+# operator loading the next situation report.
+mock_sidecar_switchable <- function(file_name = "week_09.pdf") {
+  rv <- reactiveVal(list(file_name = file_name, loaded_at = Sys.time(),
+                         paused_at = as.POSIXct(NA), paused_secs = 0))
+  list(
+    reactive = reactive(rv()),
+    load     = function(name) rv(list(file_name = name, loaded_at = Sys.time(),
+                                      paused_at = as.POSIXct(NA), paused_secs = 0)),
+    pause    = function(secs) {
+      cur <- rv()
+      # Same file, but the reactive changes - as a real pause does.
+      rv(list(file_name = cur$file_name, loaded_at = cur$loaded_at,
+              paused_at = as.POSIXct(NA), paused_secs = secs))
+    }
   )
 }
 

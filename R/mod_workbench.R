@@ -13,16 +13,21 @@
 #   form    A schema of variables entered per region via a validated form,
 #           opened by clicking a region. Suited to a tabulated source where
 #           each region carries several different values.
+#   nil     The same form with no region attached, for a document that was
+#           reviewed and reports nothing for any region. Recording that
+#           against an arbitrary region would be true but would leave the
+#           fact that it stands for the whole country implicit.
 #
 # Ledger schema (one row per region per variable):
 #   Timestamp             ISO 8601 datetime the row was committed
 #   Project, Source       operator-supplied metadata
 #   Date_Ref, Epi_Week    reference date (or period start) the value describes
 #   Date_End              period end, NA for a single-date report
-#   Region_ID             GADM GID at the target level; the join key
+#   Region_ID             GADM GID at the target level; the join key.
+#                         NA for a document-level row (Entry_Mode "nil")
 #   Region_Name           resolved administrative name (deepest available)
 #   Variable, Value       what was recorded
-#   Entry_Mode            "single" or "form" - how the value was captured
+#   Entry_Mode            "single", "form" or "nil" - how it was captured
 #   Image_File            reference image on screen at commit time (provenance)
 #   Secs_Since_Image_Load active time since that image was loaded, net of any
 #                         clock pauses in the sidecar (efficiency)
@@ -192,36 +197,55 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
       if (nrow(d) == 0) return(logical(0))
       img <- current_image()$file
       same_img <- if (is.na(img)) is.na(d$Image_File) else !is.na(d$Image_File) & d$Image_File == img
-      d$Region_ID == id & same_img
+      # NA-safe: a document-level row (nothing reported for any region) has no
+      # Region_ID, and `NA == NA` would make it uneditable.
+      same_region <- if (is.na(id)) is.na(d$Region_ID) else !is.na(d$Region_ID) & d$Region_ID == id
+      same_region & same_img
     }
 
-    # --- 2. FORM MODE: OPEN ON REGION CLICK -------------------------------
-    # Clicking a region that already has values for the current file opens
-    # the form pre-filled, and submitting replaces those rows. Without this a
+    # --- 2. THE ENTRY FORM -------------------------------------------------
+    # Opening a form for something that already has values for the current file
+    # pre-fills it, and submitting replaces those rows. Without this a
     # correction would append a second set and leave the ledger ambiguous.
-    observeEvent(map_source$click(), {
-      req(identical(controls_output$entry_mode(), "form"))
+    #
+    # The field set is the declared schema in form mode, or the single batch
+    # variable in paint mode, so a document-level entry means the same thing in
+    # both without exposing the schema builder where it is not otherwise used.
+    entry_schema <- function() {
+      if (identical(controls_output$entry_mode(), "form")) return(controls_output$schema())
+      nm <- controls_output$metadata()$var_name
+      nm <- if (is.null(nm)) "" else trimws(nm)
+      if (!nzchar(nm)) return(parse_schema_text(""))
+      # numeric accepts 0 and NA, which is all a nil return needs; the batch
+      # variable's own type governs values entered by painting.
+      parse_schema_text(paste(nm, "numeric", sep = ", "))
+    }
 
-      click <- map_source$click()
-      req(!is.null(click$id))
-
-      sch <- controls_output$schema()
+    # `region_id` is NA for a document-level entry: a report that enumerates a
+    # variable and reports nothing for any region states something true, but it
+    # belongs to the document rather than to any one region.
+    open_entry_form <- function(region_id, region_name, mode = "form",
+                                default_numeric = "") {
+      sch <- entry_schema()
       if (nrow(sch) == 0 || any(nzchar(sch$error))) {
         showNotification("Fix the variable schema before entering data.", type = "error")
-        return()
+        return(invisible(FALSE))
       }
 
-      region_name <- resolve_region_names(click$id, controls_output$geom_data())[1]
       form_errors(character(0))
 
-      prior   <- project_data()[existing_rows(click$id), , drop = FALSE]
+      prior   <- project_data()[existing_rows(region_id), , drop = FALSE]
       current <- setNames(as.character(prior$Value), prior$Variable)
       editing <- length(current) > 0
-      pending_region(list(id = click$id, name = region_name, editing = editing))
+      pending_region(list(id = region_id, name = region_name,
+                          editing = editing, mode = mode))
 
-      prefill <- function(v) {
-        if (!v %in% names(current)) return("")
-        if (is.na(current[[v]])) "NA" else current[[v]]
+      prefill <- function(v, type) {
+        if (v %in% names(current)) return(if (is.na(current[[v]])) "NA" else current[[v]])
+        if (nzchar(default_numeric) && type %in% c("count", "numeric", "binary")) {
+          return(default_numeric)
+        }
+        ""
       }
 
       showModal(modalDialog(
@@ -231,7 +255,8 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
         easyClose = FALSE,
 
         div(class = "text-muted", style = "font-size: 11px; margin-bottom: 10px;",
-            click$id,
+            if (is.na(region_id)) "Recorded against the document, not against any region."
+            else region_id,
             if (editing) tagList(br(), "Existing values shown; submitting replaces them.")),
 
         # Numeric fields use textInput rather than numericInput so that invalid
@@ -240,9 +265,10 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
         lapply(seq_len(nrow(sch)), function(i) {
           v <- sch[i, ]
           if (v$type == "ordinal") {
-            lv <- trimws(strsplit(v$levels, "|", fixed = TRUE)[[1]])
+            lv  <- trimws(strsplit(v$levels, "|", fixed = TRUE)[[1]])
+            sel <- prefill(v$name, v$type)
             selectInput(ns(paste0("fld_", v$name)), v$name, choices = lv,
-                        selected = if (prefill(v$name) %in% lv) prefill(v$name) else NULL)
+                        selected = if (sel %in% lv) sel else NULL)
           } else {
             is_num    <- v$type %in% c("count", "numeric", "binary")
             zero_hint <- blank_zero_on() && is_num
@@ -250,7 +276,8 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
                       label = paste0(v$name, " (", v$type,
                                      if (zero_hint) ", blank = 0",
                                      if (is_num) ", NA = not reported", ")"),
-                      value = prefill(v$name), placeholder = if (zero_hint) "0" else "")
+                      value = prefill(v$name, v$type),
+                      placeholder = if (zero_hint) "0" else "")
           }
         }),
 
@@ -262,7 +289,32 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
                        class = "btn-success", icon = icon(if (editing) "check" else "plus"))
         )
       ))
+      invisible(TRUE)
+    }
+
+    observeEvent(map_source$click(), {
+      req(identical(controls_output$entry_mode(), "form"))
+      click <- map_source$click()
+      req(!is.null(click$id))
+      open_entry_form(click$id,
+                      resolve_region_names(click$id, controls_output$geom_data())[1])
     })
+
+    # Available in both entry modes: whether the document is read as a map or
+    # as a table, "this report enumerates these variables and reports nothing"
+    # is the same statement, and it has no region to attach to.
+    # Optional in the controls contract, like blank_zero, so callers and test
+    # mocks that predate it keep working.
+    if (is.function(controls_output$nil_trigger)) {
+      observeEvent(controls_output$nil_trigger(), {
+        if (is.na(current_image()$file)) {
+          showNotification("Load the source document first, so the entry is attributed to it.",
+                           type = "warning")
+          return()
+        }
+        open_entry_form(NA_character_, "Nothing reported", mode = "nil", default_numeric = "0")
+      }, ignoreInit = TRUE)
+    }
 
     output$form_error_ui <- renderUI({
       errs <- form_errors()
@@ -277,7 +329,9 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
       region <- pending_region()
       req(region)
 
-      sch   <- controls_output$schema()
+      # Same field set the form was built from, so a paint-mode nil return
+      # validates against the batch variable rather than the hidden schema.
+      sch   <- entry_schema()
       rules <- controls_output$rules()
 
       # Per-field type validation.
@@ -324,7 +378,9 @@ workbench_server <- function(id, map_source, controls_output, loaded_state, side
         names     = region$name,
         variables = names(values),
         values    = unlist(values, use.names = FALSE),
-        mode      = "form"
+        # "form" for a region, "nil" for a document-level entry, so rows
+        # stating "nothing was reported" are identifiable in the export.
+        mode      = if (is.null(region$mode)) "form" else region$mode
       ))
 
       removeModal()
